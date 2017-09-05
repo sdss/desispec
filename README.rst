@@ -5,6 +5,8 @@ desispec
 Introduction
 ------------
 
+This package is a fork of the DESI pipeline for use with LVM. 
+
 This package contains scripts and packages for building and running DESI spectroscopic analyses.
 
 
