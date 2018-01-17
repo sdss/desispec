@@ -2,7 +2,54 @@
 desispec Change Log
 ===================
 
-0.15.3 (unreleased)
+0.17.2 (unreleased)
+-------------------
+
+* Trace shift optimizations from analyzing teststand data (PR `#482`_).
+
+.. _`#482`: https://github.com/desihub/desispec/pull/482
+
+0.17.1 (2017-12-20)
+-------------------
+
+* Refactors spectral regouping to be faster and derive fibermap format
+  from inputs (PR `#473`).
+* Removed deprecated Brick class, and unused coadds and redmonder zfind
+  that were using Bricks (PR `#473`).
+* Adds skyline QA; fixes QA version usage (PR `#458`_).
+* Fixes write_bintable bug if extname=None; fixes missing header comments
+* spectro DB database loading updates (PR `#477`_).
+* trace shift updates for fiber flats (PR `#479`_).
+* Pipeline scaling updates (PR `#459`_ and `#466`).
+
+.. _`#458`: https://github.com/desihub/desispec/pull/458
+.. _`#473`: https://github.com/desihub/desispec/pull/473
+.. _`#477`: https://github.com/desihub/desispec/pull/477
+.. _`#479`: https://github.com/desihub/desispec/pull/479
+.. _`#459`: https://github.com/desihub/desispec/pull/459
+.. _`#466`: https://github.com/desihub/desispec/pull/466
+
+0.17.0 (2017-11-10)
+-------------------
+
+* Enabled specter.extract.ex2d nsubbundles option for faster extractions.
+  Requires specter 0.8.1 (PR `#451`_).
+* Fixed bug in :func:`desispec.parallel.dist_discrete` (PR `#446`_)
+* Tuned pipeline for scaling tests (PR `#457`_)
+* Improved wavelength fitting (via specex update) and sky model error
+  propagation (PR `#459`_)
+* Added QL fiberflat, py3 fixes, updated algorithms and config
+* Many other QL updates (PR `#462`_)
+* Enables MPI parallelism for desi_extract_spectra script (PR `#448`_)
+
+.. _`#446`: https://github.com/desihub/desispec/pull/446
+.. _`#448`: https://github.com/desihub/desispec/pull/448
+.. _`#451`: https://github.com/desihub/desispec/pull/451
+.. _`#457`: https://github.com/desihub/desispec/pull/457
+.. _`#459`: https://github.com/desihub/desispec/pull/459
+.. _`#462`: https://github.com/desihub/desispec/pull/462
+
+0.16.0 (2017-09-29)
 -------------------
 
 * Small fixes to desi_qa_prod and qa_prod
@@ -27,11 +74,20 @@ desispec Change Log
 * Fixed exptime in fluxcalib ZP calculation (PR `#429`_)
 * Added find_exposure_night() method (PR `#429`_)
 * Add MED_SKY metric to QA and bright/dark flag in desi_qa_prod
+* Update pipeline code for specex and redrock (PR `#439`_ and `#440`_)
+* Adds code for adjusting trace locations to match sky lines (PR `#433`_)
+* Updates to DB loading (PR `#431`_)
+* Adds pixelflat code (PR `#426`_)
 
 .. _`#422`: https://github.com/desihub/desispec/pull/422
 .. _`#424`: https://github.com/desihub/desispec/pull/424
 .. _`#425`: https://github.com/desihub/desispec/pull/425
+.. _`#426`: https://github.com/desihub/desispec/pull/426
 .. _`#429`: https://github.com/desihub/desispec/pull/429
+.. _`#431`: https://github.com/desihub/desispec/pull/431
+.. _`#433`: https://github.com/desihub/desispec/pull/433
+.. _`#439`: https://github.com/desihub/desispec/pull/439
+.. _`#440`: https://github.com/desihub/desispec/pull/440
 
 0.15.2 (2017-07-12)
 -------------------
@@ -141,8 +197,8 @@ desispec Change Log
 * Update :func:`desispec.io.raw.write_raw` to enable writing simulated raw
   data with new headers.
 * Allow ``test_bootcalib`` to run even if NERSC portal is returning 403 errors.
-* Add ``bricksize`` property to :class:`desispec.brick.Bricks`; allow
-  :meth:`~desispec.brick.Bricks.brickname` to specify bricksize.
+* Add ``bricksize`` property to desispec.brick.Bricks; allow
+  `desispec.brick.Bricks.brickname` to specify bricksize.
 * Do SVD inverses when cholesky decompositions fail in fiberflat, sky
   subtraction, and flux calibration.
 * Algorithm updates for teststand and BOSS data
@@ -176,7 +232,7 @@ desispec Change Log
 
 * Update template Module file to reflect DESI+Anaconda infrastructure.
 * Update redmonster wrapper for reproducibility.
-* :meth:`desispec.io.brick.BrickBase.get_target_ids` returns target IDs in the order they appear in input file.
+* `desispec.io.brick.BrickBase.get_target_ids` returns target IDs in the order they appear in input file.
 * Set BUNIT header keywords (PR `#284`_).
 * Improved pipeline logging robustness.
 * MPI updates for robustness and non-NERSC operation.

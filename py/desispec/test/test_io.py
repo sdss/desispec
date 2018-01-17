@@ -5,6 +5,7 @@
 from __future__ import absolute_import, division
 # The line above will help with 2to3 support.
 import unittest, os
+import tempfile
 from datetime import datetime, timedelta
 from shutil import rmtree
 from pkg_resources import resource_filename
@@ -25,17 +26,31 @@ class TestIO(unittest.TestCase):
         cls.testfile = 'test-{uuid}/test-{uuid}.fits'.format(uuid=uuid1())
         cls.testyfile = 'test-{uuid}/test-{uuid}.yaml'.format(uuid=uuid1())
         cls.testbrfile = 'test-{uuid}/test-br-{uuid}.fits'.format(uuid=uuid1())
-        cls.testDir = os.path.join(os.environ['HOME'],'desi_test_io')
+        # cls.testDir = os.path.join(os.environ['HOME'],'desi_test_io')
+        cls.testDir = tempfile.mkdtemp()
         cls.origEnv = {'SPECPROD':None,
             "DESI_SPECTRO_DATA":None,
             "DESI_SPECTRO_REDUX":None}
         cls.testEnv = {'SPECPROD':'dailytest',
             "DESI_SPECTRO_DATA":os.path.join(cls.testDir,'spectro','data'),
             "DESI_SPECTRO_REDUX":os.path.join(cls.testDir,'spectro','redux')}
+        cls.datadir = cls.testEnv['DESI_SPECTRO_DATA']
+        cls.reduxdir = os.path.join(cls.testEnv['DESI_SPECTRO_REDUX'],
+                                    cls.testEnv['SPECPROD'])
         for e in cls.origEnv:
             if e in os.environ:
                 cls.origEnv[e] = os.environ[e]
             os.environ[e] = cls.testEnv[e]
+
+    def setUp(self):
+        if os.path.isdir(self.datadir):
+            rmtree(self.datadir)
+        if os.path.isdir(self.reduxdir):
+            rmtree(self.reduxdir)
+
+    def tearDown(self):
+        if os.path.exists(self.testfile):
+            os.remove(self.testfile)
 
     @classmethod
     def tearDownClass(cls):
@@ -56,6 +71,37 @@ class TestIO(unittest.TestCase):
 
         if os.path.exists(cls.testDir):
             rmtree(cls.testDir)
+
+    def test_write_bintable(self):
+        '''test write_bintable'''
+        from ..io.util import write_bintable, fitsheader
+        hdr = fitsheader(dict(A=1, B=2))
+        hdr['C'] = ('BLAT', 'FOO')
+        data = Table()
+        data['X'] = [1,2,3]
+        data['Y'] = [3,4,5]
+        write_bintable(self.testfile, data, header=hdr)
+
+        result, newhdr = fits.getdata(self.testfile, header=True)
+        self.assertEqual(result.dtype.names, data.dtype.names)
+        for colname in data.dtype.names:
+            self.assertTrue(np.all(result[colname] == data[colname]), '{} data mismatch'.format(colname))
+
+        self.assertEqual(newhdr.comments['C'], 'FOO')
+        for key in hdr.keys():
+            self.assertIn(key, newhdr)
+
+        #- repeat with other data types
+        os.remove(self.testfile)
+        hdr = dict(A=1, B=2)
+        data = data.as_array()
+        write_bintable(self.testfile, data, header=hdr)
+        result, newhdr = fits.getdata(self.testfile, header=True)
+        self.assertEqual(result.dtype.names, data.dtype.names)
+        for colname in data.dtype.names:
+            self.assertTrue(np.all(result[colname] == data[colname]), '{} data mismatch'.format(colname))
+        for key in hdr.keys():
+            self.assertIn(key, newhdr)
 
     def test_fitsheader(self):
         """Test desispec.io.util.fitsheader.
@@ -146,9 +192,12 @@ class TestIO(unittest.TestCase):
             self.assertEqual(frame.meta['FOO'], read_meta['FOO'])
 
         #- Test float32 on disk vs. float64 in memory
-        for extname in ['FLUX', 'IVAR', 'WAVELENGTH', 'RESOLUTION']:
+        for extname in ['FLUX', 'IVAR', 'RESOLUTION']:
             data = fits.getdata(self.testfile, extname)
             self.assertEqual(data.dtype, np.dtype('>f4'), '{} not type >f4'.format(extname))
+        for extname in ['WAVELENGTH']:
+            data = fits.getdata(self.testfile, extname)
+            self.assertEqual(data.dtype, np.dtype('>f8'), '{} not type >f8'.format(extname))
 
         #- with and without units
         frx = Frame(wave, flux, ivar, mask, R, meta=meta)
@@ -314,122 +363,6 @@ class TestIO(unittest.TestCase):
         self.assertTrue(np.all(fx.calib == fc.calib.astype('f4').astype('f8')))
         self.assertTrue(np.all(fx.ivar  == fc.ivar.astype('f4').astype('f8')))
         self.assertTrue(np.all(fx.mask == fc.mask))
-
-    def test_brick(self):
-        """Test desispec.io.brick.Brick objects.
-        """
-        from ..io.brick import Brick
-        from ..io.fibermap import empty_fibermap
-        from ..io.util import fitsheader
-        nspec = 5
-        nwave = 10
-        wave = np.arange(nwave)
-        flux = np.random.uniform(size=(nspec, nwave))
-        ivar = np.random.uniform(size=(nspec, nwave))
-        resolution = np.random.uniform(size=(nspec, 5, nwave))
-        fibermap = empty_fibermap(nspec)
-        fibermap['TARGETID'] = 3*np.arange(nspec)
-        night = '20101020'
-        expid = 2
-        header = dict(BRICKNAM = '0002p000', channel='b')
-        brick = Brick(self.testfile, mode='update', header=header)
-        brick.add_objects(flux, ivar, wave, resolution, fibermap, night, expid)
-        brick.add_objects(flux, ivar, wave, resolution, fibermap, night, expid+1)
-
-        #- check dtype consistency for columns in original fibermap
-        brick_fibermap = Table(brick.hdu_list['FIBERMAP'].data)
-        for colname in fibermap.colnames:
-            self.assertEqual(fibermap[colname].dtype, brick_fibermap[colname].dtype)
-
-        #- Check that the two extra columns exist (and only those)
-        self.assertIn('NIGHT', brick_fibermap.colnames)
-        self.assertIn('EXPID', brick_fibermap.colnames)
-        self.assertEqual(len(fibermap.colnames)+2, len(brick_fibermap.colnames))
-
-        brick.close()
-
-        bx = Brick(self.testfile)
-        self.assertTrue(np.all(bx.get_wavelength_grid() == wave))
-        self.assertEqual(bx.get_num_targets(), nspec)
-        self.assertEqual(bx.get_num_spectra(), 2*nspec)
-        self.assertEqual(set(bx.get_target_ids()), set(fibermap['TARGETID']))
-        flux2, ivar2, resolution2, info2 = bx.get_target(0)
-        self.assertEqual(flux2.shape, (2,10))
-        self.assertEqual(ivar2.shape, (2,10))
-        self.assertEqual(resolution2.shape, (2,5,10))
-        self.assertEqual(len(info2), 2)
-        self.assertTrue( np.all(flux2[0] == flux[0]) )
-        self.assertTrue( np.all(ivar2[0] == ivar[0]) )
-
-        bx.close()
-
-        #- test for incorrect fits file. Use self.testbrfile as this requires many spectra/wavelength.
-        #- Using self.testfile breaks above tests for shapes assertion etc. So dealing differently
-        nspec2 = 500
-        nwave2 = 1000
-        wave2 = np.arange(nwave2)
-        flux2 = np.random.uniform(size=(nspec2, nwave2))
-        ivar2 = np.random.uniform(size=(nspec2, nwave2))
-        resolution2 = np.random.uniform(size=(nspec2, 5, nwave2))
-        fibermap2 = empty_fibermap(nspec2)
-        fibermap2['TARGETID'] = 3*np.arange(nspec2)
-        night2 = '20161130'
-        expid2 = 5
-        header2 = dict(BRICKNAM = '0005p026', channel='r')
-
-        brick2 = Brick(self.testbrfile, mode='update', header=header2)
-        brick2.add_objects(flux2, ivar2, wave2, resolution2, fibermap2, night2, expid2)
-        brick2.close()
-
-        #- Now open before teardown and add a HDU. A corrupt file will throw IOError while opening
-        trueflux=np.ones((nspec2,nwave2))*0.75
-        header2 = fitsheader(header2)
-        fx = fits.open(self.testbrfile, mode='append')
-        self.assertEqual(len(fx),5)
-        fx.append(fits.ImageHDU(trueflux, name='_TRUEFLUX', header=header2))
-        fx.flush()
-        self.assertEqual(len(fx),6)
-        self.assertEqual(fx[5].header['EXTNAME'], '_TRUEFLUX')
-        fx.close()
-
-
-    def test_zbest_io(self):
-        """Test reading and writing Zfind files.
-        """
-        from ..zfind import ZfindBase
-        from ..io.zfind import read_zbest, write_zbest
-        nspec, nflux = 10, 20
-        wave = np.arange(nflux)
-        flux = np.random.uniform(size=(nspec, nflux))
-        ivar = np.random.uniform(size=(nspec, nflux))
-        zfind1 = ZfindBase(wave, flux, ivar)
-
-        zfind1.zwarn[:] = np.arange(nspec)
-        zfind1.z[:] = np.random.uniform(size=nspec)
-        zfind1.zerr[:] = np.random.uniform(size=nspec)
-        zfind1.spectype[:] = 'ELG'
-
-        brickname = '1234p567'
-        targetids = np.random.randint(0,12345678, size=nspec)
-
-        write_zbest(self.testfile, brickname, targetids, zfind1)
-        zfind2 = read_zbest(self.testfile)
-
-        self.assertTrue(np.all(zfind2.z == zfind1.z))
-        self.assertTrue(np.all(zfind2.zerr == zfind1.zerr))
-        self.assertTrue(np.all(zfind2.zwarn == zfind1.zwarn))
-        self.assertTrue(np.all(zfind2.spectype == zfind1.spectype))
-        self.assertTrue(np.all(zfind2.subtype == zfind1.subtype))
-        self.assertTrue(np.all(zfind2.brickname == brickname))
-        self.assertTrue(np.all(zfind2.targetid == targetids))
-
-        write_zbest(self.testfile, brickname, targetids, zfind1, zspec=True)
-        zfind3 = read_zbest(self.testfile)
-
-        self.assertTrue(np.all(zfind3.wave == zfind1.wave))
-        self.assertTrue(np.all(zfind3.flux == zfind1.flux.astype(np.float32)))
-        self.assertTrue(np.all(zfind3.ivar == zfind1.ivar.astype(np.float32)))
-        self.assertTrue(np.all(zfind3.model == zfind1.model))
 
     def test_image_rw(self):
         """Test reading and writing of Image objects.

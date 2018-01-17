@@ -17,9 +17,9 @@ from desiutil import stats as dustat
 import scipy,scipy.sparse,scipy.stats,scipy.ndimage
 import sys
 
-def compute_sky(frame, nsig_clipping=4.,max_iterations=100) :
+def compute_sky(frame, nsig_clipping=4.,max_iterations=100,model_ivar=False,add_variance=True) :
     """Compute a sky model.
-
+    
     Input has to correspond to sky fibers only.
     Input flux are expected to be flatfielded!
     We don't check this in this routine.
@@ -33,6 +33,10 @@ def compute_sky(frame, nsig_clipping=4.,max_iterations=100) :
           - resolution_data : 3D[nspec, ndiag, nwave]  (only sky fibers)
         nsig_clipping : [optional] sigma clipping value for outlier rejection
 
+    Optional:
+        max_iterations : int , number of iterations
+        model_ivar : replace ivar by a model to avoid bias due to correlated flux and ivar. this has a negligible effect on sims.
+    
     returns SkyModel object with attributes wave, flux, ivar, mask
     """
 
@@ -49,6 +53,22 @@ def compute_sky(frame, nsig_clipping=4.,max_iterations=100) :
     current_ivar=frame.ivar[skyfibers].copy()*(frame.mask[skyfibers]==0)
     flux = frame.flux[skyfibers]
     Rsky = frame.R[skyfibers]
+    
+    input_ivar=None 
+    if model_ivar :
+        log.info("use a model of the inverse variance to remove bias due to correlated ivar and flux")
+        input_ivar=current_ivar.copy()
+        median_ivar_vs_wave  = np.median(current_ivar,axis=0)
+        median_ivar_vs_fiber = np.median(current_ivar,axis=1)
+        median_median_ivar   = np.median(median_ivar_vs_fiber)
+        for f in range(current_ivar.shape[0]) :
+            threshold=0.01
+            current_ivar[f] = median_ivar_vs_fiber[f]/median_median_ivar * median_ivar_vs_wave
+            # keep input ivar for very low weights
+            ii=(input_ivar[f]<=(threshold*median_ivar_vs_wave))
+            #log.info("fiber {} keep {}/{} original ivars".format(f,np.sum(ii),current_ivar.shape[1]))                      
+            current_ivar[f][ii] = input_ivar[f][ii]
+    
 
     sqrtw=np.sqrt(current_ivar)
     sqrtwflux=sqrtw*flux
@@ -136,13 +156,15 @@ def compute_sky(frame, nsig_clipping=4.,max_iterations=100) :
 
     log.info("nout tot=%d"%nout_tot)
 
+    # no need restore original ivar to compute model error when modeling ivar
+    # the sky inverse variances are very similar
 
     # solve once again to get deconvolved sky variance
     try :
-        skyflux,skycovar=cholesky_solve_and_invert(A.todense(),B)
+        unused_skyflux,skycovar=cholesky_solve_and_invert(A.todense(),B)
     except np.linalg.linalg.LinAlgError :
         log.warning("cholesky_solve_and_invert failed, switching to np.linalg.lstsq and np.linalg.pinv")
-        skyflux = np.linalg.lstsq(A.todense(),B)[0]
+        #skyflux = np.linalg.lstsq(A.todense(),B)[0]
         skycovar = np.linalg.pinv(A.todense())
 
     #- sky inverse variance, but incomplete and not needed anyway
@@ -166,15 +188,83 @@ def compute_sky(frame, nsig_clipping=4.,max_iterations=100) :
     cskyflux = np.zeros(frame.flux.shape)
     for i in range(frame.nspec):
         cskyflux[i] = frame.R[i].dot(skyflux)
-
+    
+    
+    
+    # look at chi2 per wavelength and increase sky variance to reach chi2/ndf=1
+    if skyfibers.size > 1 and add_variance :
+        log.info("Add a model error due to wavelength solution noise")
+        
+        tivar = util.combine_ivar(frame.ivar[skyfibers], cskyivar[skyfibers])
+        
+        # the chi2 at a given wavelength can be large because on a cosmic
+        # and not a psf error or sky non uniformity
+        # so we need to consider only waves for which 
+        # a reasonable sky model error can be computed
+        
+        # mean sky
+        msky = np.mean(cskyflux,axis=0)
+        dwave = np.mean(np.gradient(frame.wave))
+        dskydw = np.zeros(msky.shape)
+        dskydw[1:-1]=(msky[2:]-msky[:-2])/(frame.wave[2:]-frame.wave[:-2])
+        dskydw = np.abs(dskydw)
+        
+        # now we consider a worst possible sky model error (20% error on flat, 0.5A )
+        max_possible_var = 1./(tivar+(tivar==0)) + (0.2*msky)**2 + (0.5*dskydw)**2
+        
+        # exclude residuals inconsistent with this max possible variance (at 3 sigma)
+        bad = (frame.flux[skyfibers]-cskyflux[skyfibers])**2 > 3**2*max_possible_var
+        tivar[bad]=0
+        ndata = np.sum(tivar>0,axis=0)
+        ok=np.where(ndata>1)[0]
+        print("ok.size=",ok.size)
+        chi2  = np.zeros(frame.wave.size)
+        chi2[ok] = np.sum(tivar*(frame.flux[skyfibers]-cskyflux[skyfibers])**2,axis=0)[ok]/(ndata[ok]-1)
+        chi2[ndata<=1] = 1. # default
+        
+        # now we are going to evaluate a sky model error based on this chi2, 
+        # but only around sky flux peaks (>0.1*max)
+        tmp   = np.zeros(frame.wave.size)
+        tmp   = (msky[1:-1]>msky[2:])*(msky[1:-1]>msky[:-2])*(msky[1:-1]>0.1*np.max(msky))
+        peaks = np.where(tmp)[0]+1
+        dpix  = int(np.ceil(3/dwave)) # +- n Angstrom around each peak
+        
+        skyvar = 1./(cskyivar+(cskyivar==0))
+        
+        # loop on peaks
+        for peak in peaks :
+            b=peak-dpix
+            e=peak+dpix+1
+            mchi2  = np.mean(chi2[b:e]) # mean reduced chi2 around peak
+            mndata = np.mean(ndata[b:e]) # mean number of fibers contributing
+                            
+            # sky model variance = sigma_flat * msky  + sigma_wave * dmskydw
+            sigma_flat=0.000 # the fiber flat error is already included in the flux ivar
+            sigma_wave=0.005 # A, minimum value                
+            res2=(frame.flux[skyfibers,b:e]-cskyflux[skyfibers,b:e])**2
+            var=1./(tivar[:,b:e]+(tivar[:,b:e]==0))
+            nd=np.sum(tivar[:,b:e]>0)
+            while(sigma_wave<2) :
+                pivar=1./(var+(sigma_flat*msky[b:e])**2+(sigma_wave*dskydw[b:e])**2)
+                pchi2=np.sum(pivar*res2)/nd
+                if pchi2<=1 :
+                    log.info("peak at {}A : sigma_wave={}".format(int(frame.wave[peak]),sigma_wave))
+                    skyvar[:,b:e] += ( (sigma_flat*msky[b:e])**2 + (sigma_wave*dskydw[b:e])**2 )
+                    break
+                sigma_wave += 0.005
+        
+        modified_cskyivar = (cskyivar>0)/skyvar
+    else :
+        modified_cskyivar = cskyivar.copy()
+    
     # need to do better here
     mask = (cskyivar==0).astype(np.uint32)
-
-    return SkyModel(frame.wave.copy(), cskyflux, cskyivar, mask,
-                    nrej=nout_tot)
+    
+    return SkyModel(frame.wave.copy(), cskyflux, modified_cskyivar, mask,
+                    nrej=nout_tot, stat_ivar = cskyivar) # keep a record of the statistical ivar for QA
 
 class SkyModel(object):
-    def __init__(self, wave, flux, ivar, mask, header=None, nrej=0):
+    def __init__(self, wave, flux, ivar, mask, header=None, nrej=0, stat_ivar=None):
         """Create SkyModel object
 
         Args:
@@ -199,7 +289,7 @@ class SkyModel(object):
         self.mask = util.mask32(mask)
         self.header = header
         self.nrej = nrej
-
+        self.stat_ivar = stat_ivar
 
 def subtract_sky(frame, skymodel) :
     """Subtract skymodel from frame, altering frame.flux, .ivar, and .mask
@@ -236,7 +326,7 @@ def qa_skysub(param, frame, skymodel, quick_look=False):
 
     Args:
         param : dict of QA parameters : see qa_frame.init_skysub for example
-        frame : desispec.Frame object
+        frame : desispec.Frame object;  Should have been flat fielded
         skymodel : desispec.SkyModel object
         quick_look : bool, optional
           If True, do QuickLook specific QA (or avoid some)
@@ -252,7 +342,17 @@ def qa_skysub(param, frame, skymodel, quick_look=False):
     tempframe=copy.deepcopy(frame) #- make a copy so as to propagate frame unaffected so that downstream pipeline uses it.
     subtract_sky(tempframe,skymodel) #- Note: sky subtract is done to get residuals. As part of pipeline it is done in fluxcalib stage
 
+    # Sky residuals first
     qadict = qalib.sky_resid(param, tempframe, skymodel, quick_look=quick_look)
+
+    # Sky continuum
+    if not quick_look:  # Sky continuum is measured after flat fielding in QuickLook
+        channel = frame.meta['CAMERA'][0]
+        wrange1, wrange2 = param[channel.upper()+'_CONT']
+        skyfiber, contfiberlow, contfiberhigh, meancontfiber, skycont = qalib.sky_continuum(frame,wrange1,wrange2)
+        qadict["SKYFIBERID"] = skyfiber.tolist()
+        qadict["SKYCONT"] = skycont
+        qadict["SKYCONT_FIBER"] = meancontfiber
 
     if quick_look:  # The following can be a *large* dict
         qadict_snr = qalib.SignalVsNoise(tempframe,param)

@@ -9,7 +9,9 @@ import importlib
 import yaml
 from desispec.quicklook import qllogger
 from desispec.quicklook import qlheartbeat as QLHB
+from desispec.io import qa as qawriter
 from desiutil.io import yamlify
+from desispec.quicklook.merger import QL_QAMerger
 
 def testconfig(outfilename="qlconfig.yaml"):
     """
@@ -17,7 +19,7 @@ def testconfig(outfilename="qlconfig.yaml"):
     Below the %% variables are replaced by actual object when the respective
     algorithm is executed.
     """
-    qlog=qllogger.QLLogger("QuickLook",20)
+    qlog=qllogger.QLLogger()
     log=qlog.getlog()
     url=None #- QA output will be posted to QLF if set true
 
@@ -221,8 +223,8 @@ def mapkeywords(kw,kwmap):
     """
 
     newmap={}
-    qlog=qllogger.QLLogger("QuickLook",20)
-    log=qlog.getlog()
+    # qlog=qllogger.QLLogger()
+    # log=qlog.getlog()
     for k,v in kw.items():
         if isinstance(v,str) and len(v)>=3 and  v[0:2]=="%%": #- For direct configuration
             if v[2:] in kwmap:
@@ -251,27 +253,28 @@ def runpipeline(pl,convdict,conf,mergeQA=False):
             should always be True, but leaving as option, until configuration and IO settles.
     """
 
-    qlog=qllogger.QLLogger("QuickLook",20)
+    qlog=qllogger.QLLogger()
     log=qlog.getlog()
     hb=QLHB.QLHeartbeat(log,conf["Period"],conf["Timeout"])
 
     inp=convdict["rawimage"]
     paconf=conf["PipeLine"]
-    qlog=qllogger.QLLogger("QuickLook",0)
+    qlog=qllogger.QLLogger()
     log=qlog.getlog()
     passqadict=None #- pass this dict to QAs downstream
-
+    schemaMerger=QL_QAMerger(conf['Night'],conf['Expid'],conf['Flavor'],conf['Camera'])
     QAresults=[] #- merged QA list for the whole pipeline. This will be reorganized for databasing after the pipeline executes
     for s,step in enumerate(pl):
         log.info("Starting to run step {}".format(paconf[s]["StepName"]))
         pa=step[0]
         pargs=mapkeywords(step[0].config["kwargs"],convdict)
+        schemaStep=schemaMerger.addPipelineStep(paconf[s]["StepName"])
         try:
             hb.start("Running {}".format(step[0].name))
             oldinp=inp #-  copy for QAs that need to see earlier input
             inp=pa(inp,**pargs)
         except Exception as e:
-            log.critical("Failed to run PA {} error was {}".format(step[0].name,e))
+            log.critical("Failed to run PA {} error was {}".format(step[0].name,e),exc_info=True)
             sys.exit("Failed to run PA {}".format(step[0].name))
         qaresult={}
         for qa in step[1]:
@@ -291,11 +294,14 @@ def runpipeline(pl,convdict,conf,mergeQA=False):
 
                 if qa.name=="COUNTBINS" or qa.name=="CountSpectralBins":         #TODO -must run this QA for now. change this later.
                     passqadict=res
+                if "qafile" in qargs:
+                    qawriter.write_qa_ql(qargs["qafile"],res)
                 log.debug("{} {}".format(qa.name,inp))
                 qaresult[qa.name]=res
-
+                schemaStep.addParams(res['PARAMS'])
+                schemaStep.addMetrics(res['METRICS'])
             except Exception as e:
-                log.warning("Failed to run QA {} error was {}".format(qa.name,e))
+                log.warning("Failed to run QA {}. Got Exception {}".format(qa.name,e),exc_info=True)
         if len(qaresult):
             if conf["DumpIntermediates"]:
                 f = open(paconf[s]["OutputFile"],"w")
@@ -308,10 +314,23 @@ def runpipeline(pl,convdict,conf,mergeQA=False):
 
     #- merge QAs for this pipeline execution
     if mergeQA is True:
-        from desispec.quicklook.util import merge_QAs
-        log.info("Merging all the QAs for this pipeline execution")
-        merge_QAs(QAresults)
-
+        # from desispec.quicklook.util import merge_QAs
+        # log.info("Merging all the QAs for this pipeline execution")
+        # merge_QAs(QAresults,conf)
+        log.debug("Dumping mergedQAs")
+        from desispec.io import findfile
+        ftype='ql_mergedQA_file'
+        specprod_dir=os.environ['QL_SPEC_REDUX'] if 'QL_SPEC_REDUX' in os.environ else ""
+        if conf['Flavor']=='arcs':
+            ftype='ql_mergedQAarc_file'
+        destFile=findfile(ftype,night=conf['Night'],
+                          expid=conf['Expid'],
+                          camera=conf['Camera'],
+                          specprod_dir=specprod_dir)
+# this will overwrite the file. above function returns same name for different QL executions
+# results will be erased.
+        schemaMerger.writeToFile(destFile)
+        log.info("Wrote merged QA file {}".format(destFile))
     if isinstance(inp,tuple):
        return inp[0]
     else:
@@ -337,11 +356,11 @@ def setup_pipeline(config):
     from desispec.quicklook import procalgs
     from desispec.boxcar import do_boxcar
 
-    qlog=qllogger.QLLogger("QuickLook",20)
+    qlog=qllogger.QLLogger()
     log=qlog.getlog()
     if config is None:
         return None
-    log.info("Reading Configuration")
+    log.debug("Reading Configuration")
     if "RawImage" not in config:
         log.critical("Config is missing \"RawImage\" key.")
         sys.exit("Missing \"RawImage\" key.")
@@ -393,10 +412,8 @@ def setup_pipeline(config):
 
     fiberflatfile=None
     fiberflat=None
-    if "FiberFlatFile" in config:
-        if config["Flavor"] == 'arcs':
-            pass
-        else:
+    if config["Flavor"] == 'science':
+        if "FiberFlatFile" in config:
             fiberflatfile=config["FiberFlatFile"]
 
     skyfile=None
@@ -405,15 +422,18 @@ def setup_pipeline(config):
         skyfile=config["SkyFile"]
 
     psf=None
-    if "PSFFile" in config:
-        if config["Flavor"] == 'arcs':
-            from specter.psf import load_psf
-            from pkg_resources import resource_filename
-            psffile=resource_filename('specter','test/t/psf-monospot.fits')
-            psf=load_psf(psffile)
-        else:
+    if config["Flavor"] == 'dark' or config["Flavor"] == 'bias':
+        pass
+    elif config["Flavor"] == 'arcs':
+        if not os.path.exists(os.path.join(os.environ['QL_SPEC_REDUX'],'calib2d','psf',config["Night"])):
+            os.mkdir(os.path.join(os.environ['QL_SPEC_REDUX'],'calib2d','psf',config["Night"]))
+        pass
+    elif config["Flavor"] == 'science' or config["Flavor"] == 'flat':
+        #from specter.psf import load_psf
+        if "PSFFile" in config:
             import desispec.psf
             psf=desispec.psf.PSF(config["PSFFile"])
+        #psf=load_psf(config["PSFFile"])
 
     if "basePath" in config:
         basePath=config["basePath"]

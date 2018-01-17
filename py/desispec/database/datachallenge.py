@@ -52,14 +52,12 @@ class Truth(SchemaMixin, Base):
     templatesubtype = Column(String, nullable=False)
     templateid = Column(Integer, nullable=False)
     seed = Column(BigInteger, nullable=False)
-    decam_flux_u = Column(Float, nullable=False)
-    decam_flux_g = Column(Float, nullable=False)
-    decam_flux_r = Column(Float, nullable=False)
-    decam_flux_i = Column(Float, nullable=False)
-    decam_flux_z = Column(Float, nullable=False)
-    decam_flux_Y = Column(Float, nullable=False)
-    wise_flux_W1 = Column(Float, nullable=False)
-    wise_flux_W2 = Column(Float, nullable=False)
+    mag = Column(Float, nullable=False)
+    flux_g = Column(Float, nullable=False)
+    flux_r = Column(Float, nullable=False)
+    flux_z = Column(Float, nullable=False)
+    flux_w1 = Column(Float, nullable=False)
+    flux_w2 = Column(Float, nullable=False)
     oiiflux = Column(Float, nullable=False)
     hbetaflux = Column(Float, nullable=False)
     teff = Column(Float, nullable=False)
@@ -76,130 +74,137 @@ class Truth(SchemaMixin, Base):
                 "templatesubtype='{0.templatesubtype}', " +
                 "templateid={0.templateid:d}, " +
                 "seed={0.seed:d}, " +
-                "decam_flux_u={0.decam_flux_u:f}, " +
-                "decam_flux_g={0.decam_flux_g:f}, " +
-                "decam_flux_r={0.decam_flux_r:f}, " +
-                "decam_flux_i={0.decam_flux_i:f}, " +
-                "decam_flux_z={0.decam_flux_z:f}, " +
-                "decam_flux_Y={0.decam_flux_Y:f}, " +
-                "wise_flux_W1={0.wise_flux_W1:f}, " +
-                "wise_flux_W2={0.wise_flux_W2:f}, " +
+                "mag={0.mag:f}, " +
+                "flux_g={0.flux_g:f}, " +
+                "flux_r={0.flux_r:f}, " +
+                "flux_z={0.flux_z:f}, " +
+                "flux_w1={0.flux_w1:f}, " +
+                "flux_w2={0.flux_w2:f}, " +
                 "oiiflux={0.oiiflux:f}, " +
                 "hbetaflux={0.hbetaflux:f}, " +
                 "teff={0.teff:f}, " +
                 "logg={0.logg:f}, " +
-                "feh={0.feh:f})>").format(self)
+                "feh={0.feh:f}" +
+                ")>").format(self)
 
 
 class Target(SchemaMixin, Base):
     """Representation of the target table.
     """
 
-    targetid = Column(BigInteger, primary_key=True, autoincrement=False)
+    brickid = Column(Integer, nullable=False)
+    brickname = Column(String, nullable=False)
+    brick_objid = Column(Integer, nullable=False)
     ra = Column(Float, nullable=False)
     dec = Column(Float, nullable=False)
-    desi_target = Column(BigInteger, nullable=False)
-    bgs_target = Column(BigInteger, nullable=False)
-    mws_target = Column(BigInteger, nullable=False)
-    subpriority = Column(Float, nullable=False)
-    obsconditions = Column(Integer, nullable=False)
-    brickname = Column(String, nullable=False)
-    decam_flux_u = Column(Float, nullable=False)
-    decam_flux_g = Column(Float, nullable=False)
-    decam_flux_r = Column(Float, nullable=False)
-    decam_flux_i = Column(Float, nullable=False)
-    decam_flux_z = Column(Float, nullable=False)
-    decam_flux_Y = Column(Float, nullable=False)
-    wise_flux_W1 = Column(Float, nullable=False)
-    wise_flux_W2 = Column(Float, nullable=False)
+    flux_g = Column(Float, nullable=False)
+    flux_r = Column(Float, nullable=False)
+    flux_z = Column(Float, nullable=False)
+    flux_w1 = Column(Float, nullable=False)
+    flux_w2 = Column(Float, nullable=False)
     shapeexp_r = Column(Float, nullable=False)
     shapeexp_e1 = Column(Float, nullable=False)
     shapeexp_e2 = Column(Float, nullable=False)
     shapedev_r = Column(Float, nullable=False)
     shapedev_e1 = Column(Float, nullable=False)
     shapedev_e2 = Column(Float, nullable=False)
-    decam_depth_u = Column(Float, nullable=False)
-    decam_depth_g = Column(Float, nullable=False)
-    decam_depth_r = Column(Float, nullable=False)
-    decam_depth_i = Column(Float, nullable=False)
-    decam_depth_z = Column(Float, nullable=False)
-    decam_depth_Y = Column(Float, nullable=False)
-    decam_galdepth_u = Column(Float, nullable=False)
-    decam_galdepth_g = Column(Float, nullable=False)
-    decam_galdepth_r = Column(Float, nullable=False)
-    decam_galdepth_i = Column(Float, nullable=False)
-    decam_galdepth_z = Column(Float, nullable=False)
-    decam_galdepth_Y = Column(Float, nullable=False)
-    ebv = Column(Float, nullable=False)
+    psfdepth_g = Column(Float, nullable=False)
+    psfdepth_r = Column(Float, nullable=False)
+    psfdepth_z = Column(Float, nullable=False)
+    galdepth_g = Column(Float, nullable=False)
+    galdepth_r = Column(Float, nullable=False)
+    galdepth_z = Column(Float, nullable=False)
+    mw_transmission_g = Column(Float, nullable=False)
+    mw_transmission_r = Column(Float, nullable=False)
+    mw_transmission_z = Column(Float, nullable=False)
+    mw_transmission_w1 = Column(Float, nullable=False)
+    mw_transmission_w2 = Column(Float, nullable=False)
+    targetid = Column(BigInteger, primary_key=True, autoincrement=False)
+    desi_target = Column(BigInteger, nullable=False)
+    bgs_target = Column(BigInteger, nullable=False)
+    mws_target = Column(BigInteger, nullable=False)
+    hpxpixel = Column(BigInteger, nullable=False)
+    subpriority = Column(Float, nullable=False)
+    obsconditions = Column(Integer, nullable=False)
 
     def __repr__(self):
-        return ("<Target(targetid={0.targetid:d}, " +
-                "ra={0.ra:f}, dec={0.dec:f}, " +
-                "desi_target={0.desi_target:d}, bgs_target={0.bgs_target}, " +
-                "mws_target={0.mws_target:d}, " +
-                "subpriority={0.subpriority:f}, " +
-                "obsconditions={0.obsconditions:d}, " +
+        return ("<Target(brickid={0.brickid:d}, " +
                 "brickname='{0.brickname}', " +
-                "decam_flux_u={0.decam_flux_u:f}, " +
-                "decam_flux_g={0.decam_flux_g:f}, " +
-                "decam_flux_r={0.decam_flux_r:f}, " +
-                "decam_flux_i={0.decam_flux_i:f}, " +
-                "decam_flux_z={0.decam_flux_z:f}, " +
-                "decam_flux_Y={0.decam_flux_Y:f}, " +
-                "wise_flux_W1={0.wise_flux_W1:f}, " +
-                "wise_flux_W2={0.wise_flux_W2:f}, " +
+                "brick_objid={0.brick_objid:d}, " +
+                "ra={0.ra:f}, dec={0.dec:f}, " +
+                "flux_u={0.flux_u:f}, " +
+                "flux_g={0.flux_g:f}, " +
+                "flux_r={0.flux_r:f}, " +
+                "flux_w1={0.flux_w1:f}, " +
+                "flux_w2={0.flux_w2:f}, " +
                 "shapeexp_r={0.shapeexp_r:f}," +
                 "shapeexp_e1={0.shapeexp_e1:f}," +
                 "shapeexp_e2={0.shapeexp_e2:f}," +
                 "shapedev_r={0.shapedev_r:f}, " +
                 "shapedev_e1={0.shapedev_e1:f}," +
                 "shapedev_e2={0.shapedev_e2:f}," +
-                "decam_depth_u={0.decam_depth_u:f}, " +
-                "decam_depth_g={0.decam_depth_g:f}, " +
-                "decam_depth_r={0.decam_depth_r:f}, " +
-                "decam_depth_i={0.decam_depth_i:f}, " +
-                "decam_depth_z={0.decam_depth_z:f}, " +
-                "decam_depth_Y={0.decam_depth_Y:f}, " +
-                "decam_galdepth_u={0.decam_galdepth_u:f}, " +
-                "decam_galdepth_g={0.decam_galdepth_g:f}, " +
-                "decam_galdepth_r={0.decam_galdepth_r:f}, " +
-                "decam_galdepth_i={0.decam_galdepth_i:f}, " +
-                "decam_galdepth_z={0.decam_galdepth_z:f}, " +
-                "decam_galdepth_Y={0.decam_galdepth_Y:f}, " +
-                "ebv={0.ebv:f})>").format(self)
+                "psfdepth_g={0.psfdepth_g:f}, " +
+                "psfdepth_r={0.psfdepth_r:f}, " +
+                "psfdepth_z={0.psfdepth_z:f}, " +
+                "galdepth_g={0.galdepth_g:f}, " +
+                "galdepth_r={0.galdepth_r:f}, " +
+                "galdepth_z={0.galdepth_z:f}, " +
+                "mw_transmission_g={0.mw_transmission_g:f}, " +
+                "mw_transmission_r={0.mw_transmission_r:f}, " +
+                "mw_transmission_z={0.mw_transmission_z:f}, " +
+                "mw_transmission_w1={0.mw_transmission_w1:f}, " +
+                "mw_transmission_w2={0.mw_transmission_w2:f}, " +
+                "targetid={0.targetid:d}, " +
+                "desi_target={0.desi_target:d}, bgs_target={0.bgs_target}, " +
+                "mws_target={0.mws_target:d}, " +
+                "hpxpixel={0.hpxpixel:d}, " +
+                "subpriority={0.subpriority:f}, " +
+                "obsconditions={0.obsconditions:d}" +
+                ")>").format(self)
 
 
 class ObsList(SchemaMixin, Base):
     """Representation of the obslist table.
     """
 
-    mjd = Column(Float, nullable=False)
-    exptime = Column(Float, nullable=False)
-    program = Column(String, nullable=False)
+    expid = Column(Integer, primary_key=True, autoincrement=False)
+    tileid = Column(Integer, nullable=False)
     passnum = Column(Integer, nullable=False)
-    tileid = Column(Integer, primary_key=True, autoincrement=False)
     ra = Column(Float, nullable=False)
     dec = Column(Float, nullable=False)
-    moonfrac = Column(Float, nullable=False)
-    moondist = Column(Float, nullable=False)
-    moonalt = Column(Float, nullable=False)
+    ebmv = Column(Float, nullable=False)
+    night = Column(String, nullable=False)
+    mjd = Column(Float, nullable=False)
+    exptime = Column(Float, nullable=False)
     seeing = Column(Float, nullable=False)
+    transparency = Column(Float, nullable=False)
     airmass = Column(Float, nullable=False)
+    moonfrac = Column(Float, nullable=False)
+    moonalt = Column(Float, nullable=False)
+    moonsep = Column(Float, nullable=False)
+    program = Column(String, nullable=False)
+    flavor = Column(String, nullable=False)
     # dateobs = Column(DateTime(timezone=True), nullable=False)
 
     def __repr__(self):
-        return ("<ObsList(mjd={0.mjd:f}, " +
-                "exptime={0.exptime:f}, " +
-                "program='{0.program}', " +
-                "passnum={0.passnum:d}, " +
+        return ("<ObsList(" +
+                "expid={0.expid:d}, " +
                 "tileid={0.tileid:d}, " +
+                "passnum={0.passnum:d}, " +
                 "ra={0.ra:f}, dec={0.dec:f}, " +
                 "ebmv={0.ebmv:f}, " +
-                "moonfrac={0.moonfrac:f}, " +
-                "moondist={0.moondist:f}, " +
-                "moonalt={0.moonalt:f}, " +
+                "night='{0.night}', " +
+                "mjd={0.mjd:f}, " +
+                "exptime={0.exptime:f}, " +
                 "seeing={0.seeing:f}, " +
-                "airmass={0.airmass:f})>").format(self)
+                "transparency={0.transparency:f}, " +
+                "airmass={0.airmass:f}," +
+                "moonfrac={0.moonfrac:f}, " +
+                "moonalt={0.moonalt:f}, " +
+                "moonsep={0.moonsep:f}" +
+                "program='{0.program}'," +
+                "flavor='{0.flavor}'" +
+                ")>").format(self)
 
 
 class ZCat(SchemaMixin, Base):
@@ -215,7 +220,7 @@ class ZCat(SchemaMixin, Base):
     targetid = Column(BigInteger, primary_key=True, autoincrement=False)
     deltachi2 = Column(Float, nullable=False)
     brickname = Column(String, index=True, nullable=False)
-    numobs = Column(Integer, nullable=False, default=-1)
+    # numobs = Column(Integer, nullable=False, default=-1)
 
     def __repr__(self):
         return ("<ZCat(chi2={0.chi2:f}, " +
@@ -223,8 +228,10 @@ class ZCat(SchemaMixin, Base):
                 "spectype='{0.spectype}', subtype='{0.subtype}', " +
                 "targetid={0.targetid:d}, " +
                 "deltachi2={0.deltachi2:f}, " +
-                "brickname='{0.brickname}', " +
-                "numobs={0.numobs:d})>").format(self)
+                # "brickname='{0.brickname}', " +
+                # "numobs={0.numobs:d}" +
+                "brickname='{0.brickname}'" +
+                ")>").format(self)
 
 
 class FiberAssign(SchemaMixin, Base):
@@ -262,8 +269,8 @@ class FiberAssign(SchemaMixin, Base):
                 "brickname='{0.brickname}')>").format(self)
 
 
-def load_file(filepath, tcls, hdu=1, expand=None, convert=None, q3c=False,
-              chunksize=50000, maxrows=0):
+def load_file(filepath, tcls, hdu=1, expand=None, convert=None, index=None,
+              q3c=False, chunksize=50000, maxrows=0):
     """Load a data file into the database, assuming that column names map
     to database column names with no surprises.
 
@@ -273,13 +280,15 @@ def load_file(filepath, tcls, hdu=1, expand=None, convert=None, q3c=False,
         Full path to the data file.
     tcls : :class:`sqlalchemy.ext.declarative.api.DeclarativeMeta`
         The table to load, represented by its class.
-    hdu : :class:`int`, optional
+    hdu : :class:`int` or :class:`str`, optional
         Read a data table from this HDU (default 1).
     expand : :class:`dict`, optional
         If set, map FITS column names to one or more alternative column names.
     convert : :class:`dict`, optional
         If set, convert the data for a named (database) column using the
         supplied function.
+    index : :class:`str`, optional
+        If set, add a column that just counts the number of rows.
     q3c : :class:`bool`, optional
         If set, create q3c index on the table.
     chunksize : :class:`int`, optional
@@ -295,7 +304,7 @@ def load_file(filepath, tcls, hdu=1, expand=None, convert=None, q3c=False,
     tn = tcls.__tablename__
     if filepath.endswith('.fits'):
         with fits.open(filepath) as hdulist:
-            data = hdulist[1].data
+            data = hdulist[hdu].data
     elif filepath.endswith('.ecsv'):
         data = Table.read(filepath, format='ascii.ecsv')
     else:
@@ -347,6 +356,10 @@ def load_file(filepath, tcls, hdu=1, expand=None, convert=None, q3c=False,
             i = data_names.index(col)
             data_list[i] = [convert[col](x) for x in data_list[i]]
     log.info("Column conversion complete on %s.", tn)
+    if index is not None:
+        data_list.insert(0, list(range(1, maxrows+1)))
+        data_names.insert(0, index)
+        log.info("Added index column '%s'.", index)
     data_rows = list(zip(*data_list))
     del data_list
     log.info("Converted columns into rows on %s.", tn)
@@ -391,6 +404,8 @@ def load_zcat(datapath, run1d='dc17a2', q3c=False):
     log = get_logger()
     zbestpath = join(datapath, 'spectro', 'redux', run1d, 'spectra-64',
                      '*', '*', 'zbest-64-*.fits')
+    # zbestpath = join(datapath, 'spectra-64',
+    #                  '*', '*', 'zbest-64-*.fits')
     log.info("Using zbest file search path: %s.", zbestpath)
     zbest_files = glob(zbestpath)
     if len(zbest_files) == 0:
@@ -403,15 +418,19 @@ def load_zcat(datapath, run1d='dc17a2', q3c=False):
     for f in zbest_files:
         brickname = basename(dirname(f))
         with fits.open(f) as hdulist:
-            data = hdulist[1].data
+            data = hdulist['ZBEST'].data
         log.info("Read data from %s.", f)
         good_targetids = data['TARGETID'] != 0
-        q = dbSession.query(ZCat).filter(ZCat.targetid.in_(data['TARGETID'].tolist())).all()
-        if len(q) != 0:
-            log.warning("Duplicate TARGETID found in %s.", f)
-            for z in q:
-                log.warning("Duplicate TARGETID = %d.", z.targetid)
-                good_targetids = good_targetids & (data['TARGETID'] != z.targetid)
+        #
+        # If there are too many targetids, the in_ clause will blow up.
+        # Disabling this test, and crossing fingers.
+        #
+        # q = dbSession.query(ZCat).filter(ZCat.targetid.in_(data['TARGETID'].tolist())).all()
+        # if len(q) != 0:
+        #     log.warning("Duplicate TARGETID found in %s.", f)
+        #     for z in q:
+        #         log.warning("Duplicate TARGETID = %d.", z.targetid)
+        #         good_targetids = good_targetids & (data['TARGETID'] != z.targetid)
         data_list = [data[col][good_targetids].tolist()
                      for col in data.names if col != 'COEFF']
         data_names = [col.lower() for col in data.names if col != 'COEFF']
@@ -460,7 +479,7 @@ def load_fiberassign(datapath, maxpass=4, q3c=False, latest_epoch=False):
     from astropy.io import fits
     from desiutil.log import get_logger
     log = get_logger()
-    fiberpath = join(datapath, 'fiberassign', 'output',
+    fiberpath = join(datapath, 'fiberassign',
                      'tile_*.fits')
     log.info("Using tile file search path: %s.", fiberpath)
     tile_files = glob(fiberpath)
@@ -496,7 +515,7 @@ def load_fiberassign(datapath, maxpass=4, q3c=False, latest_epoch=False):
     for tileid in latest_tiles:
         epoch, f = latest_tiles[tileid]
         with fits.open(f) as hdulist:
-            data = hdulist[1].data
+            data = hdulist['FIBER_ASSIGNMENTS'].data
         log.info("Read data from %s.", f)
         for col in ('RA', 'DEC', 'XFOCAL_DESIGN', 'YFOCAL_DESIGN'):
             data[col][np.isnan(data[col])] = -9999.0
@@ -540,61 +559,26 @@ def q3c_index(table):
     return
 
 
-def main():
-    """Entry point for command-line script.
+def setup_db(options):
+    """Initialize the database connection.
+
+    Parameters
+    ----------
+    options : :class:`argpare.Namespace`
+        Parsed command-line options.
 
     Returns
     -------
-    :class:`int`
-        An integer suitable for passing to :func:`sys.exit`.
+    :class:`bool`
+        ``True`` if the configured database is a PostgreSQL database.
     """
     global engine, schemaname
     from os import remove
     from os.path import basename, exists, join
-    from sys import argv
-    from argparse import ArgumentParser
-    from pkg_resources import resource_filename
-    from pytz import utc
-    from desiutil.log import get_logger, DEBUG, INFO
+    from desiutil.log import get_logger
+    log = get_logger()
     #
-    # command-line arguments
-    #
-    prsr = ArgumentParser(description=("Load a data challenge simulation into a " +
-                                       "database."),
-                          prog=basename(argv[0]))
-    prsr.add_argument('-c', '--clobber', action='store_true', dest='clobber',
-                      help='Delete any existing file(s) before loading.')
-    prsr.add_argument('-f', '--filename', action='store', dest='dbfile',
-                      default='quicksurvey.db', metavar='FILE',
-                      help="Store data in FILE.")
-    prsr.add_argument('-H', '--hostname', action='store', dest='hostname',
-                      metavar='HOSTNAME',
-                      help='If specified, connect to a PostgreSQL database on HOSTNAME.')
-    prsr.add_argument('-m', '--max-rows', action='store', dest='maxrows',
-                      type=int, default=0, metavar='M',
-                      help="Load up to M rows in the tables (default is all rows).")
-    prsr.add_argument('-r', '--rows', action='store', dest='chunksize',
-                      type=int, default=50000, metavar='N',
-                      help="Load N rows at a time (default %(default)s).")
-    prsr.add_argument('-s', '--schema', action='store', dest='schema',
-                      metavar='SCHEMA',
-                      help='Set the schema name in the PostgreSQL database.')
-    prsr.add_argument('-U', '--username', action='store', dest='username',
-                      metavar='USERNAME', default='desidev_admin',
-                      help="If specified, connect to a PostgreSQL database with USERNAME.")
-    prsr.add_argument('-v', '--verbose', action='store_true', dest='verbose',
-                      help='Print extra information.')
-    prsr.add_argument('datapath', metavar='DIR', help='Load the data in DIR.')
-    options = prsr.parse_args()
-    #
-    # Logging
-    #
-    if options.verbose:
-        log = get_logger(DEBUG, timestamp=True)
-    else:
-        log = get_logger(INFO, timestamp=True)
-    #
-    # Schema.
+    # Schema creation
     #
     if options.schema:
         schemaname = options.schema
@@ -635,43 +619,113 @@ def main():
         tab.schema = schemaname
     Base.metadata.create_all(engine)
     log.info("Finished creating tables.")
+    return postgresql
+
+
+def get_options(*args):
+    """Parse command-line options.
+
+    Parameters
+    ----------
+    args : iterable
+        If arguments are passed, use them instead of ``sys.argv``.
+
+    Returns
+    -------
+    :class:`argparse.Namespace`
+        The parsed options.
+    """
+    from sys import argv
+    from os.path import basename
+    from argparse import ArgumentParser
+    prsr = ArgumentParser(description=("Load a data challenge simulation into a " +
+                                       "database."),
+                          prog=basename(argv[0]))
+    prsr.add_argument('-c', '--clobber', action='store_true', dest='clobber',
+                      help='Delete any existing file(s) before loading.')
+    prsr.add_argument('-f', '--filename', action='store', dest='dbfile',
+                      default='quicksurvey.db', metavar='FILE',
+                      help="Store data in FILE.")
+    prsr.add_argument('-H', '--hostname', action='store', dest='hostname',
+                      metavar='HOSTNAME',
+                      help='If specified, connect to a PostgreSQL database on HOSTNAME.')
+    prsr.add_argument('-m', '--max-rows', action='store', dest='maxrows',
+                      type=int, default=0, metavar='M',
+                      help="Load up to M rows in the tables (default is all rows).")
+    prsr.add_argument('-r', '--rows', action='store', dest='chunksize',
+                      type=int, default=50000, metavar='N',
+                      help="Load N rows at a time (default %(default)s).")
+    prsr.add_argument('-s', '--schema', action='store', dest='schema',
+                      metavar='SCHEMA',
+                      help='Set the schema name in the PostgreSQL database.')
+    prsr.add_argument('-U', '--username', action='store', dest='username',
+                      metavar='USERNAME', default='desidev_admin',
+                      help="If specified, connect to a PostgreSQL database with USERNAME.")
+    prsr.add_argument('-v', '--verbose', action='store_true', dest='verbose',
+                      help='Print extra information.')
+    prsr.add_argument('datapath', metavar='DIR', help='Load the data in DIR.')
+    if len(args) > 0:
+        options = prsr.parse_args(args)
+    else:
+        options = prsr.parse_args()
+    return options
+
+
+def main():
+    """Entry point for command-line script.
+
+    Returns
+    -------
+    :class:`int`
+        An integer suitable for passing to :func:`sys.exit`.
+    """
+    from os.path import join
+    # from pkg_resources import resource_filename
+    from pytz import utc
+    from desiutil.log import get_logger, DEBUG, INFO
+    #
+    # command-line arguments
+    #
+    options = get_options()
+    #
+    # Logging
+    #
+    if options.verbose:
+        log = get_logger(DEBUG, timestamp=True)
+    else:
+        log = get_logger(INFO, timestamp=True)
+    #
+    # Initialize DB
+    #
+    postgresql = setup_db(options)
     #
     # Load configuration
     #
     loader = [{'filepath': join(options.datapath, 'targets', 'truth.fits'),
                'tcls': Truth,
-               'hdu': 1,
-               'expand': {'DECAM_FLUX': ('decam_flux_u', 'decam_flux_g',
-                                         'decam_flux_r', 'decam_flux_i',
-                                         'decam_flux_z', 'decam_flux_Y'),
-                          'WISE_FLUX': ('wise_flux_W1', 'wise_flux_W2')},
+               'hdu': 'TRUTH',
+               'expand': None,
                'convert': None,
+               'index': None,
                'q3c': False,
                'chunksize': options.chunksize,
                'maxrows': options.maxrows},
               {'filepath': join(options.datapath, 'targets', 'targets.fits'),
                'tcls': Target,
-               'hdu': 1,
-               'expand': {'DECAM_FLUX': ('decam_flux_u', 'decam_flux_g',
-                                         'decam_flux_r', 'decam_flux_i',
-                                         'decam_flux_z', 'decam_flux_Y'),
-                          'WISE_FLUX': ('wise_flux_W1', 'wise_flux_W2'),
-                          'DECAM_DEPTH': ('decam_depth_u', 'decam_depth_g',
-                                          'decam_depth_r', 'decam_depth_i',
-                                          'decam_depth_z', 'decam_depth_Y'),
-                          'DECAM_GALDEPTH': ('decam_galdepth_u', 'decam_galdepth_g',
-                                             'decam_galdepth_r', 'decam_galdepth_i',
-                                             'decam_galdepth_z', 'decam_galdepth_Y'),},
+               'hdu': 'TARGETS',
+               'expand': None,
                'convert': None,
+               'index': None,
                'q3c': postgresql,
                'chunksize': options.chunksize,
                'maxrows': options.maxrows},
-              {'filepath': join(options.datapath, 'twopct.ecsv'),
+              {'filepath': join(options.datapath, 'survey', 'exposures.fits'),
                'tcls': ObsList,
-               'hdu': 1,
+               'hdu': 'EXPOSURES',
                'expand': {'PASS': 'passnum'},
                # 'convert': {'dateobs': lambda x: convert_dateobs(x, tzinfo=utc)},
                'convert': None,
+               'index': None,
                'q3c': postgresql,
                'chunksize': options.chunksize,
                'maxrows': options.maxrows},]
@@ -704,7 +758,7 @@ def main():
     q = dbSession.query(ZCat).first()
     if q is None:
         log.info("Loading ZCat from %s.", options.datapath)
-        load_zcat(options.datapath)
+        load_zcat(options.datapath, run1d='mini')
         log.info("Finished loading ZCat.")
     else:
         log.info("ZCat table already loaded.")

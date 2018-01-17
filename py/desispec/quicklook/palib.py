@@ -87,8 +87,8 @@ def get_resolution(wave,nspec,psf,usesigma=False):
 
     returns : resolution data (nspec,nband,nwave); nband = 1 for usesigma = False, otherwise nband=21
     """
-    from desispec.resolution import Resolution
-
+    #from desispec.resolution import Resolution
+    from desispec.quicklook.qlresolution import QuickResolution
     nwave=len(wave)
     if usesigma:
         nband=21
@@ -102,15 +102,15 @@ def get_resolution(wave,nspec,psf,usesigma=False):
             log.info("Getting resolution from wsigmas from arc lines PSF")
             for ispec in range(nspec):
                 thissigma=psf.wdisp(ispec,wave)/psf.angstroms_per_pixel(ispec,wave) #- in pixel units
-                Rsig=Resolution(thissigma)
+                Rsig=QuickResolution(sigma=thissigma,ndiag=nband)
                 resolution_data[ispec]=Rsig.data
         else:
 
             if hasattr(psf,'xsigma_boot'): #- only use if xsigma comes from psfboot
-                log.info("Getting resolution matrix band diagonal elements from constant Gaussing Xsigma")
+                log.info("Getting resolution matrix band diagonal elements from constant Gaussian Xsigma")
                 for ispec in range(nspec):
                     thissigma=psf.xsigma(ispec,wave) 
-                    Rsig=Resolution(thissigma)
+                    Rsig=QuickResolution(sigma=thissigma,ndiag=nband)
                     resolution_data[ispec]=Rsig.data
 
     return resolution_data

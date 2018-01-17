@@ -35,7 +35,7 @@ def gaussian2D(x,y,amp,xmu,ymu,xsigma,ysigma):
     gauss = amp*np.exp(-(x-xmu)**2/(2*xsigma**2)-(y-ymu)**2/(2*ysigma**2))
     return gauss
 
-class TestQL(unittest.TestCase):
+class TestQL_QA(unittest.TestCase):
 
     def tearDown(self):
         self.rawimage.close()
@@ -58,7 +58,12 @@ class TestQL(unittest.TestCase):
         #- use specter psf for this test
         self.psffile=resource_filename('specter', 'test/t/psf-monospot.fits') 
         #self.psffile=os.environ['DESIMODEL']+'/data/specpsf/psf-b.fits'
-        self.config={}
+        self.config={"kwargs":{
+            "refKey":None,
+            "param":{},
+            "qso_resid":None
+        }
+        }
 
         #- rawimage
 
@@ -278,7 +283,13 @@ class TestQL(unittest.TestCase):
         self.assertEqual(len(res1['METRICS']['BIAS_AMP']),4)
 
     def testGetRMS(self):
-        qa=QA.Get_RMS('rms',self.config)
+        config={"kwargs":{
+            "refKey":"NOISE_AMP",
+            "param":{}
+        }
+        }
+
+        qa=QA.Get_RMS('rms',config)
         inp=self.image
         qargs={}
         qargs["PSFFile"]=self.psf
@@ -291,8 +302,8 @@ class TestQL(unittest.TestCase):
         resl=qa(inp,**qargs)
         self.assertTrue("yaml" in qargs["qafile"])
         self.assertTrue("png" in qargs["qafig"])
-        self.assertTrue(len(resl['METRICS']['RMS_OVER_AMP'])==4)
-        self.assertTrue((np.all(resl['METRICS']['RMS_OVER_AMP'])>0))
+        self.assertTrue(len(resl['METRICS']['NOISE_AMP'])==4)
+        self.assertTrue((np.all(resl['METRICS']['NOISE_AMP'])>0))
 
     def testCalcXWSigma(self):
 
@@ -366,7 +377,7 @@ class TestQL(unittest.TestCase):
         #- test if amp QAs exist
         qargs["amps"] = True
         resl2=qa(inp,**qargs)
-        self.assertTrue(len(resl2['METRICS']['NPIX_LOW_AMP'])==4)
+        self.assertTrue(len(resl2['METRICS']['NPIX_AMP'])==4)
 
     def testCountSpectralBins(self):
         qa=QA.CountSpectralBins('countbins',self.config)
@@ -410,12 +421,12 @@ class TestQL(unittest.TestCase):
         qargs["FiberMap"]=self.fibermap
         qargs["camera"]=self.camera
         qargs["expid"]=self.expid
-        qargs["amps"]=True
+        #qargs["amps"]=True
         qargs["paname"]="abc"
         qargs["dict_countbins"]=self.map2pix
         resl=qa(inp,**qargs)
-        self.assertTrue(np.all(resl['METRICS']['SUMCOUNT_RMS_AMP'])>=0.)
-        self.assertTrue(resl['METRICS']['SUMCOUNT_RMS']>0)
+        #self.assertTrue(np.all(resl['METRICS']['PEAKCOUNT_RMS_AMP'])>=0.)
+        self.assertTrue(resl['METRICS']['PEAKCOUNT_RMS']>0)
 
     def testIntegrateSpec(self):
         qa=QA.Integrate_Spec('integ',self.config)
@@ -455,7 +466,7 @@ class TestQL(unittest.TestCase):
         self.assertTrue(len(resl["METRICS"]["MED_RESID_FIBER"]) == 5) #- 5 sky fibers in the input
         self.assertTrue(resl["PARAMS"]["BIN_SZ"] == 0.1)
         #- test with different parameter set:
-        qargs["param"]={"BIN_SZ": 0.2, "PCHI_RESID": 0.05,  "PER_RESID": 95.}
+        qargs["param"]={"BIN_SZ":0.2, "PCHI_RESID":0.05, "PER_RESID":95., "SKYRESID_NORMAL_RANGE":[-5.0, 5.0], "SKYRESID_WARN_RANGE":[-10.0, 10.0]}
         resl2=qa(inp,sky,**qargs)
         self.assertTrue(len(resl["METRICS"]["DEVS_1D"])>len(resl2["METRICS"]["DEVS_1D"])) #- larger histogram bin size than default 0.1
 

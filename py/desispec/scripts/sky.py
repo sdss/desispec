@@ -9,6 +9,7 @@ from desispec.io import write_qa_frame
 from desispec.fiberflat import apply_fiberflat
 from desispec.sky import compute_sky
 from desispec.qa import qa_plots
+from desispec.cosmics import reject_cosmic_rays_1d
 from desiutil.log import get_logger
 import argparse
 import numpy as np
@@ -27,7 +28,11 @@ def parse(options=None):
                         help = 'path of QA file. Will calculate for Sky Subtraction')
     parser.add_argument('--qafig', type = str, default = None, required=False,
                         help = 'path of QA figure file')
-
+    parser.add_argument('--cosmics-nsig', type = float, default = 0, required=False,
+                        help = 'n sigma rejection for cosmics in 1D (default, no rejection)')
+    parser.add_argument('--no-extra-variance', action='store_true',
+                        help = 'do not increase sky model variance based on chi2 on sky lines')
+    
     args = None
     if options is None:
         args = parser.parse_args()
@@ -46,6 +51,9 @@ def main(args) :
     frame = read_frame(args.infile)
     specmin, specmax = np.min(frame.fibers), np.max(frame.fibers)
 
+    if args.cosmics_nsig>0 : # Reject cosmics         
+        reject_cosmic_rays_1d(frame,args.cosmics_nsig)
+
     # read fiberflat
     fiberflat = read_fiberflat(args.fiberflat)
 
@@ -53,8 +61,8 @@ def main(args) :
     apply_fiberflat(frame, fiberflat)
 
     # compute sky model
-    skymodel = compute_sky(frame)
-
+    skymodel = compute_sky(frame,add_variance=(not args.no_extra_variance))
+    
     # QA
     if (args.qafile is not None) or (args.qafig is not None):
         log.info("performing skysub QA")

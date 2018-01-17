@@ -3,9 +3,6 @@ import yaml
 from desispec.io import findfile
 import os,sys
 from desispec.quicklook import qlexceptions,qllogger
-qlog=qllogger.QLLogger("QuickLook",20)
-log=qlog.getlog()
-
 
 class Config(object):
     """ 
@@ -46,9 +43,16 @@ class Config(object):
         if "BoxcarExtract" in self.algorithms.keys():
             if "wavelength" in self.algorithms["BoxcarExtract"].keys():
                 self.wavelength = self.algorithms["BoxcarExtract"]["wavelength"][self.camera[0]]
-            else: self.wavelength = None
+        else: self.wavelength = None
+        if "SkySub_QL" in self.algorithms.keys():
+            if "Calculate_SNR" in self.algorithms["SkySub_QL"]["QA"].keys():
+                if "QSO_SNR_Residuals" in self.algorithms["SkySub_QL"]["QA"]["Calculate_SNR"].keys():
+                    self.qso_snr_resid = self.algorithms["SkySub_QL"]["QA"]["Calculate_SNR"]["QSO_SNR_Residuals"]
+                else: self.qso_snr_resid = None
         self._qlf=qlf
-
+        qlog=qllogger.QLLogger(name="QLConfig")
+        self.log=qlog.getlog()
+        self._qaRefKeys={"Bias_From_Overscan":"BIAS_AMP", "Get_RMS":"NOISE_AMP", "Count_Pixels":"NPIX_AMP", "Calc_XWSigma":"XWSIGMA", "CountSpectralBins":"NGOODFIB", "Sky_Peaks":"PEAKCOUNT", "Sky_Continuum":"SKYCONT", "Integrate_Spec":"MAGDIFF_TGT", "Sky_Residual":"RESIDRMS", "Calculate_SNR":"FIDSNR_TGT"}
 
     @property
     def mode(self):
@@ -82,12 +86,12 @@ class Config(object):
         wavelength=self.wavelength
         if self.wavelength is None:
             #- setting default wavelength for extraction for different cam
-            if self.camera[0] == 'r':
+            if self.camera[0] == 'b':
+                self.wavelength='3570,5730,0.8'
+            elif self.camera[0] == 'r':
                 self.wavelength='5630,7740,0.8'
-            elif self.camera[0] == 'b':
-                self.wavelength='3550,5730,0.8'
             elif self.camera[0] == 'z':
-                self.wavelength='7650,9830,0.8'
+                self.wavelength='7420,9830,0.8'
 
         #- Make kwargs less verbose using '%%' marker for global variables. Pipeline will map them back
         paopt_initialize={'camera': self.camera}
@@ -99,7 +103,11 @@ class Config(object):
         paopt_preproc={'camera': self.camera,'dumpfile': pixfile}
 
         if self.dumpintermediates:
-            framefile=self.dump_pa("BoxcarExtract")
+            if self.conf["Flavor"] == 'arcs':
+                calibdir=os.path.join(os.environ['QL_SPEC_REDUX'],'calib2d',self.night)
+                framefile=findfile('frame',night=self.night,expid=self.expid,camera=self.camera,outdir=calibdir)
+            else:
+                framefile=self.dump_pa("BoxcarExtract")
             fframefile=self.dump_pa("ApplyFiberFlat_QL")
             sframefile=self.dump_pa("SkySub_QL")
         else:
@@ -111,14 +119,25 @@ class Config(object):
             arcimg=findfile('pix',night=self.night,expid=self.expid,camera=self.camera,rawdata_dir=self.rawdata_dir)
             flatimg=findfile('pix',night=self.night,expid=self.conf["FiberflatExpid"],camera=self.camera,rawdata_dir=self.rawdata_dir)
             bootfile=findfile('psfboot',night=self.night,camera=self.camera,specprod_dir=self.specprod_dir)
+            psfnightfile=findfile('psfnight',night=self.night,camera=self.camera,specprod_dir=self.specprod_dir)
         else:
             arcimg=None
             flatimg=None
             bootfile=None
+            psfnightfile=None
 
         paopt_bootcalib={'ArcLampImage':arcimg, 'FlatImage':flatimg, 'outputFile':bootfile}
 
         paopt_extract={'BoxWidth': 2.5, 'FiberMap': self.fibermap, 'Wavelength': self.wavelength, 'Nspec': 500, 'PSFFile': self.psf,'usesigma': self.usesigma, 'dumpfile': framefile}
+
+        paopt_resfit={'PSFbootfile':bootfile, 'PSFoutfile': psfnightfile, 'usesigma': self.usesigma}
+
+        if self.conf["Flavor"] == 'flat':
+            fiberflatfile=findfile('fiberflat',night=self.night,expid=self.conf["FiberflatExpid"],camera=self.camera,specprod_dir=self.specprod_dir)
+        else:
+            fiberflatfile=None
+
+        paopt_comflat={'outputFile': fiberflatfile}
 
         paopt_apfflat={'FiberFlatFile': self.fiberflat, 'dumpfile': fframefile}
 
@@ -126,24 +145,39 @@ class Config(object):
             outskyfile = findfile('sky',night=self.night,expid=self.expid, camera=self.camera, rawdata_dir=self.rawdata_dir,specprod_dir=self.specprod_dir,outdir=self.outdir)
         else:
             outskyfile=None       
-        paopt_skysub={'Outskyfile': outskyfile, 'dumpfile': sframefile,'Apply_resolution': self.usesigma}
+        paopt_skysub={'Outskyfile': outskyfile, 'dumpfile': sframefile, 'Apply_resolution': self.usesigma}
 
         paopts={}
+        defList={
+            'Initialize':paopt_initialize,
+            'Preproc':paopt_preproc,
+            'BootCalibration':paopt_bootcalib,
+            'BoxcarExtract':paopt_extract,
+            'ResolutionFit':paopt_resfit,
+            'ComputeFiberflat_QL':paopt_comflat,
+            'ApplyFiberFlat_QL':paopt_apfflat,
+            'SkySub_QL':paopt_skysub
+        }
+
+        def getPAConfigFromFile(PA,algs):
+            def mergeDicts(source,dest):
+                for k in source:
+                    if k not in dest:
+                        dest[k]=source[k]
+            userconfig={}
+            if PA in algs:
+                fc=algs[PA]
+                for k in fc: #do a deep copy leave QA config out
+                    if k != "QA":
+                        userconfig[k]=fc[k]
+            defconfig={}
+            if PA in defList:
+                defconfig=defList[PA]
+            mergeDicts(defconfig,userconfig)
+            return userconfig
+
         for PA in self.palist:
-            if PA=='Initialize':
-                paopts[PA]=paopt_initialize
-            elif PA=='Preproc':
-                paopts[PA]=paopt_preproc
-            elif PA=='BootCalibration':
-                paopts[PA]=paopt_bootcalib
-            elif PA=='BoxcarExtract':
-                paopts[PA]=paopt_extract
-            elif PA=='ApplyFiberFlat_QL':
-                paopts[PA]=paopt_apfflat
-            elif PA=='SkySub_QL':
-                paopts[PA]=paopt_skysub
-            else:
-                paopts[PA]={}
+            paopts[PA]=getPAConfigFromFile(PA,self.algorithms)
         #- Ignore intermediate dumping and write explicitly the outputfile for 
         self.outputfile=self.dump_pa(self.palist[-1]) 
 
@@ -153,14 +187,16 @@ class Config(object):
         """
         dump the PA outputs to respective files. This has to be updated for fframe and sframe files as QL anticipates for dumpintermediate case.
         """
-        pafilemap={'Preproc': 'pix', 'BoxcarExtract': 'frame', 'ApplyFiberFlat_QL': 'fframe', 'SkySub_QL': 'sframe'}
+        pafilemap={'Preproc': 'pix', 'BootCalibration': 'psfboot', 'BoxcarExtract': 'frame', 'ResolutionFit': None, 'ComputeFiberflat_QL': 'fiberflat', 'ApplyFiberFlat_QL': 'fframe', 'SkySub_QL': 'sframe'}
         
         if paname in pafilemap:
             filetype=pafilemap[paname]
         else:
             raise IOError("PA name does not match any file type. Check PA name in config") 
-           
-        pafile=findfile(filetype,night=self.night,expid=self.expid, camera=self.camera, rawdata_dir=self.rawdata_dir,specprod_dir=self.specprod_dir,outdir=self.outdir)
+
+        pafile=None
+        if filetype is not None:
+            pafile=findfile(filetype,night=self.night,expid=self.expid,camera=self.camera,rawdata_dir=self.rawdata_dir,specprod_dir=self.specprod_dir,outdir=self.outdir)
 
         return pafile
 
@@ -199,7 +235,8 @@ class Config(object):
     def qaargs(self):
 
         qaopts = {}
-        
+        referencemetrics=[]        
+
         for PA in self.palist:
             for qa in self.qalist[PA]: #- individual QA for that PA
                 if self.writestaticplots:
@@ -207,11 +244,28 @@ class Config(object):
                 else:
                     qaplot = None
 
+                pa_yaml = PA.upper()
                 params=self._qaparams(qa)
-                qaopts[qa]={'camera': self.camera, 'paname': PA, 'PSFFile': self.psf, 'amps': self.amps, 'qafile': self.dump_qa()[0][0][qa],'qafig': qaplot, 'FiberMap': self.fibermap, 'param': params, 'qlf': self.qlf}
-                
-        return qaopts 
-   
+                if qa =='Calculate_SNR':
+                    qaopts[qa]={'camera': self.camera, 'paname': PA, 'PSFFile': self.psf, 'amps': self.amps,
+                            'qafile': self.dump_qa()[0][0][qa],'qafig': qaplot, 'FiberMap': self.fibermap, 
+                            'param': params, 'qlf': self.qlf,
+                            'refKey':self._qaRefKeys[qa],
+                            'qso_resid':self.qso_snr_resid}
+                else:
+                    qaopts[qa]={'camera': self.camera, 'paname': PA, 'PSFFile': self.psf, 'amps': self.amps, 
+                            'qafile': self.dump_qa()[0][0][qa],'qafig': qaplot, 'FiberMap': self.fibermap, 
+                            'param': params, 'qlf': self.qlf,
+                            'refKey':self._qaRefKeys[qa]}
+
+                if self.reference != None:
+                    for step in self.reference:
+                        if pa_yaml == step['PIPELINE_STEP']:
+                            if 'METRICS' in step:
+                                key=self._qaRefKeys[qa]
+                                qaopts[qa]['ReferenceMetrics']={key:step['METRICS'][key]}
+        return qaopts
+
     def _qaparams(self,qa):
             
         params={}
@@ -246,12 +300,36 @@ class Config(object):
         """
         Specify the filenames: yaml and png of the pa level qa files"
         """
-        filemap={'Initialize': 'ql_initial',
-                 'Preproc': 'ql_preproc',
-                 'BoxcarExtract': 'ql_boxextract',
-                 'ApplyFiberFlat_QL': 'ql_fiberflat',
-                 'SkySub_QL': 'ql_skysub'
-                 }
+        if self.conf["Flavor"] == 'arcs':
+            filemap={'Initialize': 'ql_initial_arc',
+                     'Preproc': 'ql_preproc_arc',
+                     'BootCalibration': 'ql_bootcalib',
+                     'BoxcarExtract': 'ql_boxextract_arc',
+                     'ResolutionFit': 'ql_resfit_arc'
+                     }
+        elif self.conf["Flavor"] == 'flat':
+            filemap={'Initialize': 'ql_initial',
+                     'Preproc': 'ql_preproc',
+                     'BoxcarExtract': 'ql_boxextract',
+                     'ComputeFiberflat_QL': 'ql_computeflat',
+                     }
+        elif self.conf["Flavor"] == 'bias':
+            filemap={'Initialize': 'ql_initial_bias',
+                     'Preproc': 'ql_preproc_bias'
+                     }
+        elif self.conf["Flavor"] == 'dark':
+            filemap={'Initialize': 'ql_initial_dark',
+                     'Preproc': 'ql_preproc_dark'
+                     }
+        else:
+            filemap={'Initialize': 'ql_initial',
+                     'Preproc': 'ql_preproc',
+                     'BootCalibration': 'ql_bootcalib',
+                     'BoxcarExtract': 'ql_boxextract',
+                     'ResolutionFit': 'ql_resfit',
+                     'ApplyFiberFlat_QL': 'ql_fiberflat',
+                     'SkySub_QL': 'ql_skysub'
+                     }
 
         if paname in filemap:
             filetype=filemap[paname]+'_file'
@@ -270,17 +348,35 @@ class Config(object):
         """
         Specify the filenames: yaml and png for the given qa output
         """
-        filemap={'Bias_From_Overscan': 'ql_getbias',
-                 'Get_RMS' : 'ql_getrms',
-                 'Count_Pixels': 'ql_countpix',
-                 'Calc_XWSigma': 'ql_xwsigma',
-                 'CountSpectralBins': 'ql_countbins',
-                 'Sky_Continuum': 'ql_skycont',
-                 'Sky_Peaks': 'ql_skypeak',
-                 'Sky_Residual': 'ql_skyresid',
-                 'Integrate_Spec': 'ql_integ',
-                 'Calculate_SNR': 'ql_snr'
-                 }
+        if self.conf["Flavor"] == 'arcs':
+            filemap={'Bias_From_Overscan': 'ql_getbias_arc',
+                     'Get_RMS' : 'ql_getrms_arc',
+                     'Count_Pixels': 'ql_countpix_arc',
+                     'Calc_XWSigma': 'ql_xwsigma_arc',
+                     'CountSpectralBins': 'ql_countbins_arc'
+                     }
+        elif self.conf["Flavor"] == 'bias':
+            filemap={'Bias_From_Overscan': 'ql_getbias_bias',
+                     'Get_RMS' : 'ql_getrms_bias',
+                     'Count_Pixels': 'ql_countpix_bias'
+                     }
+        elif self.conf["Flavor"] == 'dark':
+            filemap={'Bias_From_Overscan': 'ql_getbias_dark',
+                     'Get_RMS' : 'ql_getrms_dark',
+                     'Count_Pixels': 'ql_countpix_dark'
+                     }
+        else:
+            filemap={'Bias_From_Overscan': 'ql_getbias',
+                     'Get_RMS' : 'ql_getrms',
+                     'Count_Pixels': 'ql_countpix',
+                     'Calc_XWSigma': 'ql_xwsigma',
+                     'CountSpectralBins': 'ql_countbins',
+                     'Sky_Continuum': 'ql_skycont',
+                     'Sky_Peaks': 'ql_skypeak',
+                     'Sky_Residual': 'ql_skyresid',
+                     'Integrate_Spec': 'ql_integ',
+                     'Calculate_SNR': 'ql_snr'
+                     }
 
         if qaname in filemap:
             filetype=filemap[qaname]+'_file'
@@ -298,7 +394,8 @@ class Config(object):
         """
         config: desispec.quicklook.qlconfig.Config object
         """
-        log.info("Building Full Configuration")
+
+        self.log.debug("Building Full Configuration")
 
         self.program = self.conf["Program"]
         self.flavor = self.conf["Flavor"]
@@ -307,16 +404,41 @@ class Config(object):
         self.timeout = self.conf["Timeout"]
         self.fiberflatexpid = self.conf["FiberflatExpid"]
         self.psftype = self.conf["PSFType"]
+        self.templateexpid = self.conf["TemplateExpid"]
 
         #- some global variables:
-        self.rawfile=findfile("raw",night=self.night,expid=self.expid, camera=self.camera, rawdata_dir=self.rawdata_dir,specprod_dir=self.specprod_dir)
+        self.rawfile=findfile("raw",night=self.night,expid=self.expid,camera=self.camera,rawdata_dir=self.rawdata_dir,specprod_dir=self.specprod_dir)
 
-        self.fibermap=findfile("fibermap", night=self.night,expid=self.expid,camera=self.camera, rawdata_dir=self.rawdata_dir,specprod_dir=self.specprod_dir)
+        self.fibermap=findfile("fibermap", night=self.night,expid=self.expid,camera=self.camera,rawdata_dir=self.rawdata_dir,specprod_dir=self.specprod_dir)
  
-        self.fiberflat=findfile("fiberflat",night=self.night,expid=self.fiberflatexpid,camera=self.camera, rawdata_dir=self.rawdata_dir,specprod_dir=self.specprod_dir) #- TODO: Assuming same night for calibration files (here and psf)
+        self.fiberflat=findfile("fiberflat",night=self.night,expid=self.fiberflatexpid,camera=self.camera,rawdata_dir=self.rawdata_dir,specprod_dir=self.specprod_dir) #- TODO: Assuming same night for calibration files (here and psf)
         
-        self.psf=findfile(self.psftype,night=self.night,expid=self.expid,camera=self.camera, rawdata_dir=self.rawdata_dir,specprod_dir=self.specprod_dir)  
-        
+        self.psf=findfile(self.psftype,night=self.night,expid=self.expid,camera=self.camera,rawdata_dir=self.rawdata_dir,specprod_dir=self.specprod_dir)  
+
+        #- Get reference metrics from template yaml file
+        if self.flavor == 'arcs':
+            template=findfile('ql_mergedQAarc_file',night=self.night,expid=self.templateexpid,camera=self.camera,rawdata_dir=self.rawdata_dir,specprod_dir=self.specprod_dir)
+        else:
+            template=findfile('ql_mergedQA_file',night=self.night,expid=self.templateexpid,camera=self.camera,rawdata_dir=self.rawdata_dir,specprod_dir=self.specprod_dir)
+        self.reference=None
+        if os.path.isfile(template):
+            with open(template) as reference:
+                refdict=yaml.load(reference)
+                nights=refdict['NIGHTS']
+                for night in nights:
+                    if self.night == night['NIGHT']:
+                        exposures=night['EXPOSURES']
+                        for exposure in exposures:
+                            if self.templateexpid == exposure['EXPID']:
+                                cameras=exposure['CAMERAS']
+                                for camera in cameras:
+                                    if self.camera == camera['CAMERA']:
+                                        self.reference=camera['PIPELINE_STEPS']
+                if self.reference is None:
+                    self.log.warning("WARNING template file is malformed %s"%template)                    
+        else:
+            self.log.warning("WARNING can't open template file %s"%template)
+
         outconfig={}
 
         outconfig['Night'] = self.night
@@ -355,16 +477,34 @@ def check_config(outconfig):
     """
     Given the expanded config, check for all possible file existence etc....
     """
+    qlog=qllogger.QLLogger(name="QLConfig")
+    log=qlog.getlog()
+    log.info("Checking if all the necessary files exist.")
 
-    if outconfig["Flavor"]=="science":
+    calib_flavors=['arcs','dark','bias']
+    if outconfig["Flavor"]=='science':
         files = [outconfig["RawImage"], outconfig["FiberMap"], outconfig["FiberFlatFile"], outconfig["PSFFile"]]
-        log.info("Checking if all the necessary files exist.")
         for thisfile in files:
             if not os.path.exists(thisfile):
                 sys.exit("File does not exist: {}".format(thisfile))
             else:
                 log.info("File check: Okay: {}".format(thisfile))
-        log.info("All necessary file exist for this configuration.")
+    elif outconfig["Flavor"] in calib_flavors:
+        files = [outconfig["RawImage"], outconfig["FiberMap"]]
+        for thisfile in files:
+            if not os.path.exists(thisfile):
+                sys.exit("File does not exist: {}".format(thisfile))
+            else:
+                log.info("File check: Okay: {}".format(thisfile))
+    elif outconfig["Flavor"]=="flat":
+        files = [outconfig["RawImage"], outconfig["FiberMap"], outconfig["PSFFile"]]
+        for thisfile in files:
+            if not os.path.exists(thisfile):
+                sys.exit("File does not exist: {}".format(thisfile))
+            else:
+                log.info("File check: Okay: {}".format(thisfile))
+    log.info("All necessary files exist for {} configuration.".format(outconfig["Flavor"]))
+
     return 
 
 
@@ -386,20 +526,24 @@ class Palist(object):
         self.algorithms=algorithms
         self.palist=self._palist()
         self.qalist=self._qalist()
+        qlog=qllogger.QLLogger(name="QLConfig")
+        self.log=qlog.getlog()
         
     def _palist(self):
         
         if self.thislist is not None:
             pa_list=self.thislist
         else: #- construct palist
-            if self.flavor == "arcs":
-                pa_list=['Initialize','Preproc','BoxcarExtract'] #- class names for respective PAs (see desispec.quicklook.procalgs)
+            if self.flavor == 'arcs':
+                pa_list=['Initialize','Preproc','BootCalibration','BoxcarExtract','ResolutionFit'] #- class names for respective PAs (see desispec.quicklook.procalgs)
             elif self.flavor == "flat":
-                pa_list=['Initialize','Preproc','BoxcarExtract', 'ComputeFiberFlat_QL']
-            elif self.flavor == "science":
+                pa_list=['Initialize','Preproc','BoxcarExtract','ComputeFiberflat_QL']
+            elif self.flavor == 'bias' or self.flavor == 'dark':
+                pa_list=['Initialize','Preproc']
+            elif self.flavor == 'science':
                 pa_list=['Initialize','Preproc','BoxcarExtract', 'ApplyFiberFlat_QL','SkySub_QL']
             else:
-                log.warning("Not a valid flavor. Use a valid flavor type to build a palist. Exiting.")
+                self.log.warning("Not a valid flavor. Use a valid flavor type to build a palist. Exiting.")
                 sys.exit(0)
         self.pamodule='desispec.quicklook.procalgs'
         return pa_list       
@@ -412,11 +556,26 @@ class Palist(object):
             for PA in self.thislist:
                 qalist[PA]=self.algorithms[PA]['QA'].keys()
         else:
-            QAs_initial=['Bias_From_Overscan']
-            QAs_preproc=['Get_RMS','Count_Pixels','Calc_XWSigma']
-            QAs_extract=['CountSpectralBins']
-            QAs_apfiberflat=['Sky_Continuum','Sky_Peaks']
-            QAs_SkySub=['Sky_Residual','Integrate_Spec','Calculate_SNR']
+            if self.flavor == 'arcs':
+                QAs_initial=['Bias_From_Overscan']
+                QAs_preproc=['Get_RMS','Count_Pixels']
+                QAs_bootcalib=['Calc_XWSigma']
+                QAs_extract=['CountSpectralBins']
+                QAs_resfit=[]
+            elif self.flavor =="flat":
+                QAs_initial=['Bias_From_Overscan']
+                QAs_preproc=['Get_RMS','Count_Pixels']
+                QAs_extract=['CountSpectralBins']
+                QAs_computeflat=[]
+            elif self.flavor == 'bias' or self.flavor == 'dark':
+                QAs_initial=['Bias_From_Overscan']
+                QAs_preproc=['Get_RMS','Count_Pixels']
+            elif self.flavor =="science":
+                QAs_initial=['Bias_From_Overscan']
+                QAs_preproc=['Get_RMS','Count_Pixels','Calc_XWSigma']
+                QAs_extract=['CountSpectralBins']
+                QAs_apfiberflat=['Sky_Continuum','Sky_Peaks']
+                QAs_SkySub=['Sky_Residual','Integrate_Spec','Calculate_SNR']
         
             qalist={}
             for PA in self.palist:
@@ -424,8 +583,14 @@ class Palist(object):
                     qalist[PA] = QAs_initial
                 elif PA == 'Preproc':
                     qalist[PA] = QAs_preproc
+                elif PA == 'BootCalibration':
+                    qalist[PA] = QAs_bootcalib
                 elif PA == 'BoxcarExtract':
                     qalist[PA] = QAs_extract
+                elif PA == 'ResolutionFit':
+                    qalist[PA] = QAs_resfit
+                elif PA == 'ComputeFiberflat_QL':
+                    qalist[PA] = QAs_computeflat
                 elif PA == 'ApplyFiberFlat_QL':
                     qalist[PA] = QAs_apfiberflat
                 elif PA == 'SkySub_QL':
