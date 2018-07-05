@@ -42,8 +42,8 @@ from desispec import util
 class Frame(object):
     def __init__(self, wave, flux, ivar, mask=None, resolution_data=None,
                 fibers=None, spectrograph=None, meta=None, fibermap=None,
-                 chi2pix=None,
-                 wsigma=None,ndiag=21
+                 chi2pix=None,scores=None,scores_comments=None,
+                 wsigma=None,ndiag=21, suppress_res_warning=False
     ):
         """
         Lightweight wrapper for multiple spectra on a common wavelength grid
@@ -65,6 +65,10 @@ class Frame(object):
             fibermap: fibermap table
             chi2pix: 2D[nspec, nwave] chi2 of 2D model to pixel-level data
                 for pixels that contributed to each flux bin
+            scores: dictionnary of 1D arrays of size nspec
+            scores_comments: dictionnary of string (explaining the scores)
+            suppress_res_warning: bool to suppress Warning message when the Resolution image is not read
+        
         Parameters below allow on-the-fly resolution calculation
             wsigma: 2D[nspec,nwave] sigma widths for each wavelength bin for all fibers
         Notes:
@@ -97,6 +101,8 @@ class Frame(object):
         self.fibermap = fibermap
         self.nspec, self.nwave = self.flux.shape
         self.chi2pix = chi2pix
+        self.scores  = scores
+        self.scores_comments  = scores_comments
         self.ndiag=ndiag
         fibers_per_spectrograph = 500   #- hardcode; could get from desimodel
 
@@ -129,8 +135,9 @@ class Frame(object):
             #SK I believe this should be error, but looking at the
             #tests frame objects are allowed to not to have resolution data
             # thus I changed value error to a simple warning message.
-            log = get_logger()
-            log.warning("Frame object is constructed without resolution data or respective "\
+            if not suppress_res_warning:
+                log = get_logger()
+                log.warning("Frame object is constructed without resolution data or respective "\
                         "sigma widths. Resolution will not be available")
             # raise ValueError("Need either resolution_data or coefficients to generate it")
         self.spectrograph = spectrograph
@@ -243,6 +250,8 @@ class Frame(object):
         else:
             chi2pix = None
 
+        #- we do not propagate the scores here
+            
         wsigma=None
         if self.wsigma is not None:
             wsigma=self.wsigma[index]

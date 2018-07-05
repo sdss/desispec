@@ -18,6 +18,7 @@ import warnings
 
 import numpy as np
 
+import desiutil.log
 from desiutil.log import get_logger
 
 
@@ -134,9 +135,9 @@ def dist_balanced(nwork, maxworkers):
             number may be less than this.
 
     Returns:
-        A list of tuples, one for each worker.  The first element 
-        of the tuple is the first item assigned to the worker, 
-        and the second element is the number of items assigned to 
+        A list of tuples, one for each worker.  The first element
+        of the tuple is the first item assigned to the worker,
+        and the second element is the number of items assigned to
         the worker.
     """
     workers = maxworkers
@@ -150,7 +151,7 @@ def dist_balanced(nwork, maxworkers):
             workers -= 1
             ntask = nwork // workers
             leftover = nwork % workers
-    
+
     ret = []
     for w in range(workers):
         wfirst = None
@@ -188,9 +189,8 @@ def distribute_partition(A, k):
             low = mid + 1
     return low
 
-def dist_discrete(worksizes, workers, id, pow=1.0):
-    """
-    Distribute indivisible blocks of items between groups.
+def dist_discrete_all(worksizes, workers, power=1.0):
+    """Distribute indivisible blocks of items between groups.
 
     Given some contiguous blocks of items which cannot be
     subdivided, distribute these blocks to the specified
@@ -204,16 +204,16 @@ def dist_discrete(worksizes, workers, id, pow=1.0):
     Args:
         worksizes (list): The sizes of the indivisible blocks.
         workers (int): The number of workers.
-        id (int): The worker ID whose range should be returned.
         pow (float): The power to use for weighting
 
     Returns:
-        A tuple.  The first element of the tuple is the first
-        block assigned to the worker ID, and the second element
-        is the number of blocks assigned to the worker.
+        list:  Each element is a tuple.  The first element of the tuple
+            is the first block assigned to the worker, and the second
+            element is the number of blocks assigned to the worker.
+
     """
     chunks = np.array(worksizes, dtype=np.int64)
-    weights = np.power(chunks.astype(np.float64), pow)
+    weights = np.power(chunks.astype(np.float64), power)
     max_per_proc = float(distribute_partition(weights.astype(np.int64), workers))
 
     if len(worksizes) < workers:
@@ -244,12 +244,39 @@ def dist_discrete(worksizes, workers, id, pow=1.0):
 
     if len(dist) < workers:
         # The load imbalance was really bad.  Just warn and assign the
-        # remaining workers zero items. 
+        # remaining workers zero items.
         warnings.warn("Load imbalance.  Some work items are so large that not all workers have items.", RuntimeWarning)
         for i in range(len(dist), workers):
             dist.append( (off, 0) )
 
-    return dist[id]
+    return dist
+
+
+def dist_discrete(worksizes, workers, workerid, power=1.0):
+    """Distribute indivisible blocks of items between groups.
+
+    Given some contiguous blocks of items which cannot be
+    subdivided, distribute these blocks to the specified
+    number of groups in a way which minimizes the maximum
+    total items given to any group.  Optionally weight the
+    blocks by a power of their size when computing the
+    distribution.
+
+    This is effectively the "Painter"s Partition Problem".
+
+    Args:
+        worksizes (list): The sizes of the indivisible blocks.
+        workers (int): The number of workers.
+        workerid (int): The worker ID whose range should be returned.
+        power (float): The power to use for weighting
+
+    Returns:
+        A tuple.  The first element of the tuple is the first
+        block assigned to the worker ID, and the second element
+        is the number of blocks assigned to the worker.
+    """
+    allworkers = dist_discrete_all(worksizes, workers, power=power)
+    return allworkers[workerid]
 
 
 @contextmanager
@@ -271,13 +298,18 @@ def stdouterr_redirected(to=None, comm=None):
         to (str): The output file name.
         comm (mpi4py.MPI.Comm): The optional MPI communicator.
     """
+    nproc = 1
+    rank = 0
+    if comm is not None:
+        nproc = comm.size
+        rank = comm.rank
 
     # The currently active POSIX file descriptors
     fd_out = sys.stdout.fileno()
     fd_err = sys.stderr.fileno()
 
-    # The DESI logger
-    log = get_logger()
+    # The DESI loggers.
+    desi_loggers = desiutil.log._desiutil_log_root
 
     def _redirect(out_to, err_to):
 
@@ -310,22 +342,27 @@ def stdouterr_redirected(to=None, comm=None):
             sys.stderr = io.TextIOWrapper(os.fdopen(fd_err, 'wb'))
 
         # update DESI logging to use new stdout
-        while len(log.handlers) > 0:
-            h = log.handlers[0]
-            log.removeHandler(h)
-        # Add the current stdout.
-        ch = logging.StreamHandler(sys.stdout)
-        formatter = logging.Formatter("%(levelname)s:%(filename)s:%(lineno)s:%(funcName)s: %(message)s")
-        ch.setFormatter(formatter)
-        log.addHandler(ch)
+        for name, logger in desi_loggers.items():
+            hformat = None
+            while len(logger.handlers) > 0:
+                h = logger.handlers[0]
+                if hformat is None:
+                    hformat = h.formatter._fmt
+                logger.removeHandler(h)
+            # Add the current stdout.
+            ch = logging.StreamHandler(sys.stdout)
+            formatter = logging.Formatter(hformat, datefmt='%Y-%m-%dT%H:%M:%S')
+            ch.setFormatter(formatter)
+            logger.addHandler(ch)
 
     # redirect both stdout and stderr to the same file
 
     if to is None:
         to = "/dev/null"
 
-    if (comm is None) or (comm.rank == 0):
-        log.debug("Begin log redirection to {} at {}".format(to, time.asctime()))
+    if rank == 0:
+        log = get_logger()
+        log.info("Begin log redirection to {} at {}".format(to, time.asctime()))
 
     # Save the original file descriptors so we can restore them later
     saved_fd_out = os.dup(fd_out)
@@ -333,9 +370,8 @@ def stdouterr_redirected(to=None, comm=None):
 
     try:
         pto = to
-        if comm is not None:
-            if to != "/dev/null":
-                pto = "{}_{}".format(to, comm.rank)
+        if to != "/dev/null":
+            pto = "{}_{}".format(to, rank)
 
         # open python file, which creates low-level POSIX file
         # descriptor.
@@ -355,21 +391,25 @@ def stdouterr_redirected(to=None, comm=None):
         # restore old stdout and stderr
         _redirect(out_to=saved_fd_out, err_to=saved_fd_err)
 
-        if comm is not None:
-            # concatenate per-process files
-            comm.barrier()
-            if comm.rank == 0:
-                with open(to, "w") as outfile:
-                    for p in range(comm.size):
-                        outfile.write("================= Process {} =================\n".format(p))
-                        fname = "{}_{}".format(to, p)
-                        with open(fname) as infile:
-                            outfile.write(infile.read())
-                        os.remove(fname)
+        if nproc > 1:
             comm.barrier()
 
-        if (comm is None) or (comm.rank == 0):
-            log.debug("End log redirection to {} at {}".format(to, time.asctime()))
+        # concatenate per-process files
+        if rank == 0:
+            with open(to, "w") as outfile:
+                for p in range(nproc):
+                    outfile.write("================= Process {} =================\n".format(p))
+                    fname = "{}_{}".format(to, p)
+                    with open(fname) as infile:
+                        outfile.write(infile.read())
+                    os.remove(fname)
+
+        if nproc > 1:
+            comm.barrier()
+
+        if rank == 0:
+            log = get_logger()
+            log.info("End log redirection to {} at {}".format(to, time.asctime()))
 
         # flush python handles for good measure
         sys.stdout.flush()
@@ -425,4 +465,3 @@ def take_turns(comm, at_a_time, func, *args, **kwargs):
         comm_group.barrier()
 
     return ret
-

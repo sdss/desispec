@@ -21,7 +21,7 @@ def _parse_date_obs(value):
     converts DATE-OBS keywork to int
     with for instance DATE-OBS=2016-12-21T18:06:21.268371-05:00
     '''
-    m = re.search('(\d+)-(\d+)-(\d+)T', value)
+    m = re.search(r'(\d+)-(\d+)-(\d+)T', value)
     Y,M,D=tuple(map(int, m.groups()))
     dateobs=int(Y*10000+M*100+D)
     return dateobs
@@ -37,9 +37,9 @@ def _parse_sec_keyword(value):
 
     i.e. BIASSEC2='[7:56,51:4146]' -> (slice(50,4146), slice(6,56))
     '''
-    m = re.search('\[(\d+):(\d+)\,(\d+):(\d+)\]', value)
+    m = re.search(r'\[(\d+):(\d+)\,(\d+):(\d+)\]', value)
     if m is None:
-        m = re.search('\[(\d+):(\d+)\, (\d+):(\d+)\]', value)
+        m = re.search(r'\[(\d+):(\d+)\, (\d+):(\d+)\]', value)
         if m is None :
             raise ValueError('unable to parse {} as [a:b, c:d]'.format(value))
 
@@ -132,12 +132,12 @@ def masked_median(images,masks=None) :
     '''
     Perfomes a median of an list of input images. If a list of mask is provided,
     the median is performed only on unmasked pixels.
-    
+
     Args:
-       images : list of images of same shape
+       images : 3D numpy array : list of images of same shape
     Options:
        masks : list of mask images of same shape as the images. Only pixels with mask==0 are considered in the median.
-    
+
     Returns : median image
     '''
     log = get_logger()
@@ -146,7 +146,7 @@ def masked_median(images,masks=None) :
         log.info("simple median of %d images"%len(images))
         return np.median(images,axis=0)
     else :
-        log.info("masked array median of %d images"%len(images))        
+        log.info("masked array median of %d images"%len(images))
         return np.ma.median(np.ma.masked_array(data=images,mask=(masks!=0)),axis=0).data
 
 def _background(image,header,patch_width=200,stitch_width=10,stitch=False) :
@@ -233,14 +233,23 @@ def _background(image,header,patch_width=200,stitch_width=10,stitch=False) :
     log.info("done")
     return bkg
 
-def read_ccd_calibration(header, primary_header, filename) :
+def read_ccd_calibration(header, primary_header, filename=None) :
     """Please provide documentation for this function!
     """
     log=get_logger()
 
+    if filename is None :
+        if not "DESI_CCD_CALIBRATION_DATA" in os.environ :
+            log.warning("Need environment variable DESI_CCD_CALIBRATION_DATA to access to the CCD calibration data, returning empty dict")
+            return dict()
+            
+        filename = os.path.join(os.environ["DESI_CCD_CALIBRATION_DATA"],"ccd_calibration.yaml")
+        
     if not os.path.isfile(filename) :
         log.error("Cannot find calibration data file '%s'"%filename)
         raise IOError("Cannot find calibration data file '%s'"%filename)
+
+    log.info("Reading CCD calibration data in {}".format(filename))
 
     stream = open(filename, 'r')
     data   = yaml.load(stream)
@@ -403,15 +412,8 @@ def preproc(rawimage, header, primary_header, bias=True, dark=True, pixflat=True
     log=get_logger()
 
     calibration_data = None
-
-    if ccd_calibration_filename is None :
-        srch_file = "data/ccd/ccd_calibration.yaml"
-        if not resource_exists('desispec', srch_file):
-            log.error("Cannot find CCD calibration file {:s}".format(srch_file))
-        else :
-            ccd_calibration_filename=resource_filename('desispec', srch_file)
-
-    if ccd_calibration_filename is not None and  ccd_calibration_filename is not False :
+    
+    if ccd_calibration_filename is not False :
         calibration_data = read_ccd_calibration(header, primary_header, ccd_calibration_filename)
 
     #- Get path to calibration data
@@ -489,15 +491,15 @@ def preproc(rawimage, header, primary_header, bias=True, dark=True, pixflat=True
         if dark.shape != image.shape :
             log.error('shape mismatch dark {} != image {}'.format(dark.shape, image.shape))
             raise ValueError('shape mismatch dark {} != image {}'.format(dark.shape, image.shape))
-        
-        
+
+
         if calibration_data and "EXPTIMEKEY" in calibration_data :
             exptime_key=calibration_data["EXPTIMEKEY"]
             log.info("Using exposure time keyword %s for dark normalization"%exptime_key)
         else :
             exptime_key="EXPTIME"
         exptime =  primary_header[exptime_key]
-        
+
         log.info("Multiplying dark by exptime %f"%(exptime))
         dark *= exptime
 
@@ -508,7 +510,7 @@ def preproc(rawimage, header, primary_header, bias=True, dark=True, pixflat=True
 
         if nogain :
             gain = 1.
-        else : 
+        else :
             #- Initial teststand data may be missing GAIN* keywords; don't crash
             if 'GAIN'+amp in header:
                 gain = header['GAIN'+amp]          #- gain = electrons / ADU
@@ -604,16 +606,16 @@ def preproc(rawimage, header, primary_header, bias=True, dark=True, pixflat=True
 
         image[kk] = data*gain
 
-    
+
     if not nocrosstalk :
         #- apply cross-talk
 
         # the ccd looks like :
         # C D
-        # A B 
+        # A B
         # for cross talk, we need a symmetric 4x4 flip_matrix
         # of coordinates ABCD giving flip of both axis
-        # when computing crosstalk of 
+        # when computing crosstalk of
         #    A   B   C   D
         #
         # A  AA  AB  AC  AD
@@ -625,7 +627,7 @@ def preproc(rawimage, header, primary_header, bias=True, dark=True, pixflat=True
         fip_axis_0= np.array([[1,1,-1,-1],
                               [1,1,-1,-1],
                               [-1,-1,1,1],
-                              [-1,-1,1,1]])    
+                              [-1,-1,1,1]])
         fip_axis_1= np.array([[1,-1,1,-1],
                               [-1,1,-1,1],
                               [1,-1,1,-1],
@@ -657,7 +659,7 @@ def preproc(rawimage, header, primary_header, bias=True, dark=True, pixflat=True
                 ii2 = _parse_sec_keyword(header['CCDSEC'+amp2])
                 image[ii2] -= a12flux
                 # mask[ii2]  |= a12mask (not sure we really need to propagate the mask)
-    
+
     #- Divide by pixflat image
     pixflat = get_calibration_image(calibration_data,calibration_data_path,"PIXFLAT",pixflat)
     if pixflat is not False :

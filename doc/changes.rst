@@ -2,25 +2,200 @@
 desispec Change Log
 ===================
 
-0.17.2 (unreleased)
+0.22.1 (unreleased)
+-------------------
+
+* No changes yet.
+
+0.22.0 (2018-06-30)
+-------------------
+
+This is the version used for mock observing in June 2018.  It includes an
+update to the directory substructure where raw data are found, grouping each
+exposure into a separate directory `$DESI_SPECTRO_DATA/{YEARMMDD}/{EXPID}/`.
+
+* Faster traceshift code; requires numba (PR `#634`_).
+* Fixed integration tests (PR `#635`_).
+* Give empty HDUs am ``EXTNAME`` (PR `#636`_).
+* Update redshift database loading in integration test (PR `#638`_).
+* Integration test DB loading (PR `#640`_).
+* Move ccd_calibration.yaml to SVN repo (PR `#641`_).
+* Logging QA metric status for QLF (PR `#642`_).
+* Supporting both new and old fibermap via io.read_fibermap (PP `#643`_).
+* Faster lower memory preproc using numba (PR `#644`_)
+* ivar bugfix in resample_flux interpolation (PR `#646`_).
+* Many QL updates from mock observing (PR `#648`_).
+* Raw data in NIGHT/EXPID/*.* instead of NIGHT/*.* (PR `#648`_).
+* Fix cosmics masking near masked saturated pixels (PR `#649`_).
+* Update edison realtime queue config to 25 nodes (PR `#650`_).
+* trace_shift code supports PSF formats without "PSF" HDU (PR `#654`_).
+
+.. _`#634`: https://github.com/desihub/desispec/pull/634
+.. _`#635`: https://github.com/desihub/desispec/pull/635
+.. _`#636`: https://github.com/desihub/desispec/pull/636
+.. _`#638`: https://github.com/desihub/desispec/pull/638
+.. _`#640`: https://github.com/desihub/desispec/pull/640
+.. _`#641`: https://github.com/desihub/desispec/pull/641
+.. _`#642`: https://github.com/desihub/desispec/pull/642
+.. _`#643`: https://github.com/desihub/desispec/pull/643
+.. _`#644`: https://github.com/desihub/desispec/pull/644
+.. _`#646`: https://github.com/desihub/desispec/pull/646
+.. _`#648`: https://github.com/desihub/desispec/pull/648
+.. _`#649`: https://github.com/desihub/desispec/pull/649
+.. _`#650`: https://github.com/desihub/desispec/pull/650
+.. _`#654`: https://github.com/desihub/desispec/pull/654
+
+0.21.0 (2018-05-25)
+-------------------
+
+Major updates including non-backwards compatible changes to QL output format
+and pipeline updates for semi-realtime nightly processing.
+
+* Pipeline fix to allow redrock to use a full node per healpix (PR `#585`_).
+* Update pipeline maxtime/maxnodes job calculation (PR `#588`_).
+* Better sync of pixel tasks and DB sync bugfixes (PR `#590`_).
+* Improved handling of errors in case of full job failure (PR `#592`_).
+* QA speedups and improvements (PR `#593`_)
+  * Add ability to load Frame without reading Resolution matrix
+  * Refactor offline QA to use qaprod_dir more sensibly
+  * Include hooks in QA to previous fiberflat file location (calib2d)
+  * Inhibit scatter plot in skyredidual QA
+* Pass MAG into output zbest file (PR `#595`_)
+* Allow running multiple task types in a single job (PR `#601`_).
+* Pipeline hooks for processing a single exposure (PR `#604`_).
+* Override PSF file psferr to avoid masking bright lines.
+  Requires specter > 0.8.1 (PR `#606`_).
+* QL QA reorganization (PR `#577`_, `#600`_, `#607`_, `#613`_).
+* Integration test and QA fixes (PR `#602`_ and `#605`_).
+* New desi_night scripts for semi-realtime processing (PR `#609`_).
+* Spectro teststand calibration/utility code updates (PR `#610`_)
+* QL S/N vs. mag updates (PR `#611`_)
+* QL resampling fixes (PR `#615`_)
+* Merge database modules (PR `#616`_).
+* Add flexure tests to QL (PR `#617`_).
+* Added cori and edison realtime queue support (PR `#618`_, `#619`_, `#624`_).
+* QL output format updates (PR `#623`_).
+
+.. _`#577`: https://github.com/desihub/desispec/pull/577
+.. _`#585`: https://github.com/desihub/desispec/pull/585
+.. _`#588`: https://github.com/desihub/desispec/pull/588
+.. _`#590`: https://github.com/desihub/desispec/pull/590
+.. _`#592`: https://github.com/desihub/desispec/pull/592
+.. _`#593`: https://github.com/desihub/desispec/pull/593
+.. _`#595`: https://github.com/desihub/desispec/pull/595
+.. _`#600`: https://github.com/desihub/desispec/pull/600
+.. _`#601`: https://github.com/desihub/desispec/pull/601
+.. _`#602`: https://github.com/desihub/desispec/pull/602
+.. _`#604`: https://github.com/desihub/desispec/pull/604
+.. _`#605`: https://github.com/desihub/desispec/pull/605
+.. _`#606`: https://github.com/desihub/desispec/pull/606
+.. _`#607`: https://github.com/desihub/desispec/pull/607
+.. _`#609`: https://github.com/desihub/desispec/pull/609
+.. _`#610`: https://github.com/desihub/desispec/pull/610
+.. _`#611`: https://github.com/desihub/desispec/pull/611
+.. _`#613`: https://github.com/desihub/desispec/pull/613
+.. _`#615`: https://github.com/desihub/desispec/pull/615
+.. _`#616`: https://github.com/desihub/desispec/pull/616
+.. _`#617`: https://github.com/desihub/desispec/pull/617
+.. _`#618`: https://github.com/desihub/desispec/pull/618
+.. _`#619`: https://github.com/desihub/desispec/pull/619
+.. _`#623`: https://github.com/desihub/desispec/pull/623
+.. _`#624`: https://github.com/desihub/desispec/pull/624
+
+0.20.0 (2018-03-29)
+-------------------
+
+Multiple non-backwards compatible changes:
+
+* Astropy 2 compatibility (PR `#519`_).
+* Update Travis tests to recent versions.
+* Integration test fixes (PR `#552`_).
+* Adds pipeline db count_task_states (PR `#552`_).
+* Standardize spectro filenames/locations (PR `#545`_ and `#559`_).
+* Complete rewrite of task pipelining (PR `#520`_, `#523`_, `#536`_, `#537`_,
+  `#538`_, `#540`_, `#543`_, `#544`_, `#547`_, )
+* QL format updates (`#517`_, `#554`_)
+* module file set DESI_CCD_CALIBRATION_DATA (`#564`_).
+* Optionally include RA,DEC in merged zcatalog (`#562`_).
+* QL updates to S/N calculations (`#556`_).
+* fix BUNIT, HPXNSIDE, HPXPIXEL keywords (PR `#566`_)
+
+.. _`#517`: https://github.com/desihub/desispec/pull/517
+.. _`#519`: https://github.com/desihub/desispec/pull/519
+.. _`#520`: https://github.com/desihub/desispec/pull/520
+.. _`#523`: https://github.com/desihub/desispec/pull/523
+.. _`#536`: https://github.com/desihub/desispec/pull/536
+.. _`#537`: https://github.com/desihub/desispec/pull/537
+.. _`#538`: https://github.com/desihub/desispec/pull/538
+.. _`#540`: https://github.com/desihub/desispec/pull/540
+.. _`#543`: https://github.com/desihub/desispec/pull/543
+.. _`#544`: https://github.com/desihub/desispec/pull/544
+.. _`#545`: https://github.com/desihub/desispec/pull/545
+.. _`#547`: https://github.com/desihub/desispec/pull/547
+.. _`#552`: https://github.com/desihub/desispec/pull/552
+.. _`#554`: https://github.com/desihub/desispec/pull/554
+.. _`#556`: https://github.com/desihub/desispec/pull/556
+.. _`#559`: https://github.com/desihub/desispec/pull/559
+.. _`#562`: https://github.com/desihub/desispec/pull/562
+.. _`#564`: https://github.com/desihub/desispec/pull/564
+.. _`#566`: https://github.com/desihub/desispec/pull/566
+
+0.19.0 (2018-03-01)
+-------------------
+
+* Update DB loading for desitarget 0.19.0 targets; make DB loading
+  API less specific to datachallenge directory structure (PR `#516`_).
+
+.. _`#516`: https://github.com/desihub/desispec/pull/516
+
+0.18.0 (2018-02-23)
+-------------------
+
+* Replace deprecated scipy.stats.chisqprob with
+  scipy.stats.distributions.chi2.sf for compatibility with
+  scipy 1.0. (PR `#503`_)
+* Faster desi_group_spectra that also propagates SCORES table
+  (PR `#505`_ and `#507`_ )
+* Add options for fitting spatially non-uniform sky (PR `#506`_)
+* Fix logger redirection (PR `#508`_)
+* Add hooks for MPI extraction timing benchmarks (PR `#509`_)
+* QuickLook metric renaming (PR `#512`_)
+
+.. _`#503`: https://github.com/desihub/desispec/pull/503
+.. _`#505`: https://github.com/desihub/desispec/pull/505
+.. _`#506`: https://github.com/desihub/desispec/pull/506
+.. _`#507`: https://github.com/desihub/desispec/pull/507
+.. _`#508`: https://github.com/desihub/desispec/pull/508
+.. _`#509`: https://github.com/desihub/desispec/pull/509
+.. _`#512`: https://github.com/desihub/desispec/pull/512
+
+0.17.2 (2018-01-30)
 -------------------
 
 * Trace shift optimizations from analyzing teststand data (PR `#482`_).
+* Minor QA edits to accommodate minitest (PR `#489`_)
+* Additional QA edits including qaprod_root() method (PR `#490`_)
+* Introduce QA_Night, QA_MultiExp and refactor QA_Prod accordingly (PR `#491`_)
+* Add SCORES HDU to frame files (PR `#492`_)
 
 .. _`#482`: https://github.com/desihub/desispec/pull/482
+.. _`#489`: https://github.com/desihub/desispec/pull/489
+.. _`#490`: https://github.com/desihub/desispec/pull/490
+.. _`#491`: https://github.com/desihub/desispec/pull/491
+.. _`#492`: https://github.com/desihub/desispec/pull/492
 
 0.17.1 (2017-12-20)
 -------------------
 
 * Refactors spectral regouping to be faster and derive fibermap format
-  from inputs (PR `#473`).
+  from inputs (PR `#473`_).
 * Removed deprecated Brick class, and unused coadds and redmonder zfind
-  that were using Bricks (PR `#473`).
+  that were using Bricks (PR `#473`_).
 * Adds skyline QA; fixes QA version usage (PR `#458`_).
 * Fixes write_bintable bug if extname=None; fixes missing header comments
 * spectro DB database loading updates (PR `#477`_).
 * trace shift updates for fiber flats (PR `#479`_).
-* Pipeline scaling updates (PR `#459`_ and `#466`).
+* Pipeline scaling updates (PR `#459`_ and `#466`_).
 
 .. _`#458`: https://github.com/desihub/desispec/pull/458
 .. _`#473`: https://github.com/desihub/desispec/pull/473

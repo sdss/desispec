@@ -19,7 +19,7 @@ from .util import healpix_subdirectory
 
 def findfile(filetype, night=None, expid=None, camera=None, groupname=None,
     nside=64, band=None, spectrograph=None, rawdata_dir=None, specprod_dir=None,
-    download=False, outdir=None):
+    download=False, outdir=None, qaprod_dir=None):
     """Returns location where file should be
 
     Args:
@@ -37,6 +37,7 @@ def findfile(filetype, night=None, expid=None, camera=None, groupname=None,
     Options:
         rawdata_dir : overrides $DESI_SPECTRO_DATA
         specprod_dir : overrides $DESI_SPECTRO_REDUX/$SPECPROD/
+        qaprod_dir : defaults to $DESI_SPECTRO_REDUX/$SPECPROD/QA/ if not provided
         download : if not found locally, try to fetch remotely
         outdir : use this directory for output instead of canonical location
     """
@@ -44,9 +45,10 @@ def findfile(filetype, night=None, expid=None, camera=None, groupname=None,
     #- NOTE: specprod_dir is the directory $DESI_SPECTRO_REDUX/$SPECPROD,
     #-       specprod is just the environment variable $SPECPROD
     location = dict(
-        raw = '{rawdata_dir}/{night}/desi-{expid:08d}.fits.fz',
-        pix = '{rawdata_dir}/{night}/pix-{camera}-{expid:08d}.fits',
-        fiberflat = '{specprod_dir}/calib2d/{night}/fiberflat-{camera}-{expid:08d}.fits',
+        raw = '{rawdata_dir}/{night}/{expid:08d}/desi-{expid:08d}.fits.fz',
+        preproc = '{specprod_dir}/preproc/{night}/{expid:08d}/preproc-{camera}-{expid:08d}.fits',
+        fiberflat = '{specprod_dir}/exposures/{night}/{expid:08d}/fiberflat-{camera}-{expid:08d}.fits',
+        fiberflatnight = '{specprod_dir}/calibnight/{night}/fiberflatnight-{camera}-{night}.fits',
         frame = '{specprod_dir}/exposures/{night}/{expid:08d}/frame-{camera}-{expid:08d}.fits',
         cframe = '{specprod_dir}/exposures/{night}/{expid:08d}/cframe-{camera}-{expid:08d}.fits',
         fframe = '{specprod_dir}/exposures/{night}/{expid:08d}/fframe-{camera}-{expid:08d}.fits',
@@ -54,107 +56,34 @@ def findfile(filetype, night=None, expid=None, camera=None, groupname=None,
         sky = '{specprod_dir}/exposures/{night}/{expid:08d}/sky-{camera}-{expid:08d}.fits',
         stdstars = '{specprod_dir}/exposures/{night}/{expid:08d}/stdstars-{spectrograph:d}-{expid:08d}.fits',
         calib = '{specprod_dir}/exposures/{night}/{expid:08d}/calib-{camera}-{expid:08d}.fits',
-        qa_data = '{specprod_dir}/QA/exposures/{night}/{expid:08d}/qa-{camera}-{expid:08d}.yaml',
-        qa_data_exp = '{specprod_dir}/QA/exposures/{night}/{expid:08d}/qa-{expid:08d}.yaml',
-        qa_bootcalib = '{specprod_dir}/QA/calib2d/psf/{night}/qa-psfboot-{camera}.pdf',
-        qa_sky_fig = '{specprod_dir}/QA/exposures/{night}/{expid:08d}/qa-sky-{camera}-{expid:08d}.png',
-        qa_skychi_fig = '{specprod_dir}/QA/exposures/{night}/{expid:08d}/qa-skychi-{camera}-{expid:08d}.png',
-        qa_flux_fig = '{specprod_dir}/QA/exposures/{night}/{expid:08d}/qa-flux-{camera}-{expid:08d}.png',
-        qa_toplevel_html = '{specprod_dir}/QA/qa-toplevel.html',
-        qa_calib = '{specprod_dir}/QA/calib2d/{night}/qa-{camera}-{expid:08d}.yaml',
-        qa_calib_html = '{specprod_dir}/QA/calib2d/qa-calib2d.html',
-        qa_calib_exp = '{specprod_dir}/QA/calib2d/{night}/qa-{expid:08d}.yaml',
-        qa_calib_exp_html = '{specprod_dir}/QA/calib2d/{night}/qa-{expid:08d}.html',
-        qa_exposures_html = '{specprod_dir}/QA/exposures/qa-exposures.html',
-        qa_exposure_html = '{specprod_dir}/QA/exposures/{night}/{expid:08d}/qa-{expid:08d}.html',
-        qa_flat_fig = '{specprod_dir}/QA/calib2d/{night}/qa-flat-{camera}-{expid:08d}.png',
-        qa_ztruth = '{specprod_dir}/QA/exposures/{night}/qa-ztruth-{night}.yaml',
-        qa_ztruth_fig = '{specprod_dir}/QA/exposures/{night}/qa-ztruth-{night}.png',
-        ql_bootcalib_fig = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-bootcalib-{camera}-{expid:08d}.png',
-        ql_bootcalib_file = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-bootcalib-{camera}-{expid:08d}.yaml',
-        ql_boxextract_fig = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-boxextract-{camera}-{expid:08d}.png',
-        ql_boxextract_file = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-boxextract-{camera}-{expid:08d}.yaml',
-        ql_boxextract_arc_fig = '{specprod_dir}/calib2d/{night}/ql-boxextractarc-{camera}-{expid:08d}.png',
-        ql_boxextract_arc_file = '{specprod_dir}/calib2d/{night}/ql-boxextractarc-{camera}-{expid:08d}.yaml',
-        ql_computeflat_fig = '{specprod_dir}/calib2d/{night}/ql-computeflat-{camera}-{expid:08d}.png',
-        ql_computeflat_file = '{specprod_dir}/calib2d/{night}/ql-computeflat-{camera}-{expid:08d}.yaml',
-        ql_countbins_fig = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-countbins-{camera}-{expid:08d}.png',
-        ql_countbins_file = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-countbins-{camera}-{expid:08d}.yaml',
-        ql_countbins_arc_fig = '{specprod_dir}/calib2d/{night}/ql-countbinsarc-{camera}-{expid:08d}.png',
-        ql_countbins_arc_file = '{specprod_dir}/calib2d/{night}/ql-countbinsarc-{camera}-{expid:08d}.yaml',
-        ql_countpix_fig = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-countpix-{camera}-{expid:08d}.png',
-        ql_countpix_file = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-countpix-{camera}-{expid:08d}.yaml',
-        ql_countpix_arc_fig = '{specprod_dir}/calib2d/{night}/ql-countpixarc-{camera}-{expid:08d}.png',
-        ql_countpix_arc_file = '{specprod_dir}/calib2d/{night}/ql-countpixarc-{camera}-{expid:08d}.yaml',
-        ql_countpix_bias_fig = '{specprod_dir}/calib2d/{night}/ql-countpixbias-{camera}-{expid:08d}.png',
-        ql_countpix_bias_file = '{specprod_dir}/calib2d/{night}/ql-countpixbias-{camera}-{expid:08d}.yaml',
-        ql_countpix_dark_fig = '{specprod_dir}/calib2d/{night}/ql-countpixdark-{camera}-{expid:08d}.png',
-        ql_countpix_dark_file = '{specprod_dir}/calib2d/{night}/ql-countpixdark-{camera}-{expid:08d}.yaml',
-        ql_fiberflat_fig = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-fiberflat-{camera}-{expid:08d}.png',
-        ql_fiberflat_file = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-fiberflat-{camera}-{expid:08d}.yaml',
-        ql_getbias_fig = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-getbias-{camera}-{expid:08d}.png',
-        ql_getbias_file = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-getbias-{camera}-{expid:08d}.yaml',
-        ql_getbias_arc_fig = '{specprod_dir}/calib2d/{night}/ql-getbiasarc-{camera}-{expid:08d}.png',
-        ql_getbias_arc_file = '{specprod_dir}/calib2d/{night}/ql-getbiasarc-{camera}-{expid:08d}.yaml',
-        ql_getbias_bias_fig = '{specprod_dir}/calib2d/{night}/ql-getbiasbias-{camera}-{expid:08d}.png',
-        ql_getbias_bias_file = '{specprod_dir}/calib2d/{night}/ql-getbiasbias-{camera}-{expid:08d}.yaml',
-        ql_getbias_dark_fig = '{specprod_dir}/calib2d/{night}/ql-getbiasdark-{camera}-{expid:08d}.png',
-        ql_getbias_dark_file = '{specprod_dir}/calib2d/{night}/ql-getbiasdark-{camera}-{expid:08d}.yaml',
-        ql_getrms_fig = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-getrms-{camera}-{expid:08d}.png',
-        ql_getrms_file = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-getrms-{camera}-{expid:08d}.yaml',
-        ql_getrms_arc_fig = '{specprod_dir}/calib2d/{night}/ql-getrmsarc-{camera}-{expid:08d}.png',
-        ql_getrms_arc_file = '{specprod_dir}/calib2d/{night}/ql-getrmsarc-{camera}-{expid:08d}.yaml',
-        ql_getrms_bias_fig = '{specprod_dir}/calib2d/{night}/ql-getrmsbias-{camera}-{expid:08d}.png',
-        ql_getrms_bias_file = '{specprod_dir}/calib2d/{night}/ql-getrmsbias-{camera}-{expid:08d}.yaml',
-        ql_getrms_dark_fig = '{specprod_dir}/calib2d/{night}/ql-getrmsdark-{camera}-{expid:08d}.png',
-        ql_getrms_dark_file = '{specprod_dir}/calib2d/{night}/ql-getrmsdark-{camera}-{expid:08d}.yaml',
-        ql_initial_fig = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-initial-{camera}-{expid:08d}.png',
-        ql_initial_file = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-initial-{camera}-{expid:08d}.yaml',
-        ql_initial_arc_fig = '{specprod_dir}/calib2d/{night}/ql-initialarc-{camera}-{expid:08d}.png',
-        ql_initial_arc_file = '{specprod_dir}/calib2d/{night}/ql-initialarc-{camera}-{expid:08d}.yaml',
-        ql_initial_bias_fig = '{specprod_dir}/calib2d/{night}/ql-initialbias-{camera}-{expid:08d}.png',
-        ql_initial_bias_file = '{specprod_dir}/calib2d/{night}/ql-initialbias-{camera}-{expid:08d}.yaml',
-        ql_initial_dark_fig = '{specprod_dir}/calib2d/{night}/ql-initialdark-{camera}-{expid:08d}.png',
-        ql_initial_dark_file = '{specprod_dir}/calib2d/{night}/ql-initialdark-{camera}-{expid:08d}.yaml',
-        ql_integ_fig = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-integ-{camera}-{expid:08d}.png',
-        ql_integ_file = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-integ-{camera}-{expid:08d}.yaml',
-        ql_mergedQA_file = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-mergedQA-{camera}-{expid:08d}.yaml',
-        ql_mergedQAarc_file = '{specprod_dir}/calib2d/{night}/ql-mergedQAarc-{camera}-{expid:08d}.yaml',
-        ql_preproc_fig = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-preproc-{camera}-{expid:08d}.png',
-        ql_preproc_file = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-preproc-{camera}-{expid:08d}.yaml',
-        ql_preproc_arc_fig = '{specprod_dir}/calib2d/{night}/ql-preprocarc-{camera}-{expid:08d}.png',
-        ql_preproc_arc_file = '{specprod_dir}/calib2d/{night}/ql-preprocarc-{camera}-{expid:08d}.yaml',
-        ql_preproc_bias_fig = '{specprod_dir}/calib2d/{night}/ql-preprocbias-{camera}-{expid:08d}.png',
-        ql_preproc_bias_file = '{specprod_dir}/calib2d/{night}/ql-preprocbias-{camera}-{expid:08d}.yaml',
-        ql_preproc_dark_fig = '{specprod_dir}/calib2d/{night}/ql-preprocdark-{camera}-{expid:08d}.png',
-        ql_preproc_dark_file = '{specprod_dir}/calib2d/{night}/ql-preprocdark-{camera}-{expid:08d}.yaml',
-        ql_resfit_fig = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-resfit-{camera}-{expid:08d}.png',
-        ql_resfit_file = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-resfit-{camera}-{expid:08d}.yaml',
-        ql_resfit_arc_fig = '{specprod_dir}/calib2d/{night}/ql-resfitarc-{camera}-{expid:08d}.png',
-        ql_resfit_arc_file = '{specprod_dir}/calib2d/{night}/ql-resfitarc-{camera}-{expid:08d}.yaml',
-        ql_skycont_fig = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-skycont-{camera}-{expid:08d}.png',
-        ql_skycont_file = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-skycont-{camera}-{expid:08d}.yaml',
-        ql_skypeak_fig = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-skypeak-{camera}-{expid:08d}.png',
-        ql_skypeak_file = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-skypeak-{camera}-{expid:08d}.yaml',
-        ql_skyresid_fig = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-skyresid-{camera}-{expid:08d}.png',
-        ql_skyresid_file = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-skyresid-{camera}-{expid:08d}.yaml',
-        ql_skysub_fig = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-skysub-{camera}-{expid:08d}.png',
-        ql_skysub_file = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-skysub-{camera}-{expid:08d}.yaml',
-        ql_snr_fig = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-snr-{camera}-{expid:08d}.png',
-        ql_snr_file = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-snr-{camera}-{expid:08d}.yaml',
-        ql_xwsigma_fig = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-xwsigma-{camera}-{expid:08d}.png',
-        ql_xwsigma_file = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-xwsigma-{camera}-{expid:08d}.yaml',
-        ql_xwsigma_arc_fig = '{specprod_dir}/calib2d/{night}/ql-xwsigmaarc-{camera}-{expid:08d}.png',
-        ql_xwsigma_arc_file = '{specprod_dir}/calib2d/{night}/ql-xwsigmaarc-{camera}-{expid:08d}.yaml',
+        qa_data = '{qaprod_dir}/exposures/{night}/{expid:08d}/qa-{camera}-{expid:08d}.yaml',
+        qa_data_exp = '{qaprod_dir}/exposures/{night}/{expid:08d}/qa-{expid:08d}.yaml',
+        qa_bootcalib = '{qaprod_dir}/calib2d/psf/{night}/qa-psfboot-{camera}.pdf',
+        qa_sky_fig = '{qaprod_dir}/exposures/{night}/{expid:08d}/qa-sky-{camera}-{expid:08d}.png',
+        qa_skychi_fig = '{qaprod_dir}/exposures/{night}/{expid:08d}/qa-skychi-{camera}-{expid:08d}.png',
+        qa_flux_fig = '{qaprod_dir}/exposures/{night}/{expid:08d}/qa-flux-{camera}-{expid:08d}.png',
+        qa_toplevel_html = '{qaprod_dir}/qa-toplevel.html',
+        qa_calib = '{qaprod_dir}/calib2d/{night}/qa-{camera}-{expid:08d}.yaml',
+        qa_calib_html = '{qaprod_dir}/calib2d/qa-calib2d.html',
+        qa_calib_exp = '{qaprod_dir}/calib2d/{night}/qa-{expid:08d}.yaml',
+        qa_calib_exp_html = '{qaprod_dir}/calib2d/{night}/qa-{expid:08d}.html',
+        qa_exposures_html = '{qaprod_dir}/exposures/qa-exposures.html',
+        qa_exposure_html = '{qaprod_dir}/exposures/{night}/{expid:08d}/qa-{expid:08d}.html',
+        qa_flat_fig = '{qaprod_dir}/calib2d/{night}/qa-flat-{camera}-{expid:08d}.png',
+        qa_ztruth = '{qaprod_dir}/exposures/{night}/qa-ztruth-{night}.yaml',
+        qa_ztruth_fig = '{qaprod_dir}/exposures/{night}/qa-ztruth-{night}.png',
+        ql_fig = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-qlfig-{camera}-{expid:08d}.png',
+        ql_file = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-qlfile-{camera}-{expid:08d}.json',
+        ql_mergedQA_file = '{specprod_dir}/exposures/{night}/{expid:08d}/ql-mergedQA-{camera}-{expid:08d}.json',
         psf = '{specprod_dir}/exposures/{night}/{expid:08d}/psf-{camera}-{expid:08d}.fits',
-        psfnight = '{specprod_dir}/calib2d/psf/{night}/psfnight-{camera}.fits',
-        psfboot = '{specprod_dir}/calib2d/psf/{night}/psfboot-{camera}.fits',
-        fibermap = '{rawdata_dir}/{night}/fibermap-{expid:08d}.fits',
+        psfnight = '{specprod_dir}/calibnight/{night}/psfnight-{camera}-{night}.fits',
+        psfboot = '{specprod_dir}/exposures/{night}/{expid:08d}/psfboot-{camera}-{expid:08d}.fits',
+        fibermap = '{rawdata_dir}/{night}/{expid:08d}/fibermap-{expid:08d}.fits',
         zcatalog = '{specprod_dir}/zcatalog-{specprod}.fits',
         spectra = '{specprod_dir}/spectra-{nside}/{hpixdir}/spectra-{nside}-{groupname}.fits',
+        redrock = '{specprod_dir}/spectra-{nside}/{hpixdir}/redrock-{nside}-{groupname}.h5',
         coadd = '{specprod_dir}/spectra-{nside}/{hpixdir}/coadd-{nside}-{groupname}.fits',
         zbest = '{specprod_dir}/spectra-{nside}/{hpixdir}/zbest-{nside}-{groupname}.fits',
-        # location["zspec"] = '{specprod_dir}/spectra/{hpixdir}/zspec-{nside}-{hpix}.fits',
     )
     location['desi'] = location['raw']
 
@@ -178,6 +107,9 @@ def findfile(filetype, night=None, expid=None, camera=None, groupname=None,
     if specprod_dir is None and 'specprod_dir' in required_inputs:
         specprod_dir = specprod_root()
 
+    if qaprod_dir is None and 'qaprod_dir' in required_inputs:
+        qaprod_dir = qaprod_root()
+
     if 'specprod' in required_inputs:
         #- Replace / with _ in $SPECPROD so we can use it in a filename
         specprod = os.getenv('SPECPROD').replace('/', '_')
@@ -185,9 +117,9 @@ def findfile(filetype, night=None, expid=None, camera=None, groupname=None,
         specprod = None
 
     actual_inputs = {
-        'specprod_dir':specprod_dir, 'specprod':specprod,
+        'specprod_dir':specprod_dir, 'specprod':specprod, 'qaprod_dir':qaprod_dir,
         'night':night, 'expid':expid, 'camera':camera, 'groupname':groupname,
-        'nside':nside, 'hpixdir':hpixdir, 'band':band, 
+        'nside':nside, 'hpixdir':hpixdir, 'band':band,
         'spectrograph':spectrograph,
         'hpixdir':hpixdir,
         }
@@ -214,20 +146,20 @@ def findfile(filetype, night=None, expid=None, camera=None, groupname=None,
 def get_raw_files(filetype, night, expid, rawdata_dir=None):
     """Get files for a specified exposure.
 
-    Uses :func:`findfile` to determine the valid file names for the specified 
-    type.  Any camera identifiers not matching the regular expression 
+    Uses :func:`findfile` to determine the valid file names for the specified
+    type.  Any camera identifiers not matching the regular expression
     [brz][0-9] will be silently ignored.
 
     Args:
-        filetype(str): Type of files to get. Valid choices are 'raw', 'pix', 
+        filetype(str): Type of files to get. Valid choices are 'raw', 'preproc',
             'fibermap'.
-        night(str): Date string for the requested night in the format 
+        night(str): Date string for the requested night in the format
             YYYYMMDD.
         expid(int): Exposure number to get files for.
         rawdata_dir(str): [optional] overrides $DESI_SPECTRO_DATA
 
     Returns:
-        dict: Dictionary of found file names using camera id strings as keys, 
+        dict: Dictionary of found file names using camera id strings as keys,
             which are guaranteed to match the regular expression [brz][0-9].
     """
     glob_pattern = findfile(filetype, night, expid, camera='*', rawdata_dir=rawdata_dir)
@@ -246,21 +178,21 @@ def get_raw_files(filetype, night, expid, rawdata_dir=None):
 def get_files(filetype, night, expid, specprod_dir=None, **kwargs):
     """Get files for a specified exposure.
 
-    Uses :func:`findfile` to determine the valid file names for the specified 
-    type.  Any camera identifiers not matching the regular expression 
+    Uses :func:`findfile` to determine the valid file names for the specified
+    type.  Any camera identifiers not matching the regular expression
     [brz][0-9] will be silently ignored.
 
     Args:
-        filetype(str): Type of files to get. Valid choices are 'frame', 
+        filetype(str): Type of files to get. Valid choices are 'frame',
             'cframe', 'psf', etc.
         night(str): Date string for the requested night in the format YYYYMMDD.
         expid(int): Exposure number to get files for.
-        specprod_dir(str): Path containing the exposures/ directory to use. If 
-            the value is None, then the value of :func:`specprod_root` is used 
+        specprod_dir(str): Path containing the exposures/ directory to use. If
+            the value is None, then the value of :func:`specprod_root` is used
             instead. Ignored when raw is True.
 
     Returns:
-        dict: Dictionary of found file names using camera id strings as keys, 
+        dict: Dictionary of found file names using camera id strings as keys,
             which are guaranteed to match the regular expression [brz][0-9].
     """
     glob_pattern = findfile(filetype, night, expid, camera='*', specprod_dir=specprod_dir)
@@ -401,7 +333,9 @@ def get_reduced_frames(channels=['b','r','z'], nights=None, ftype='cframe', **kw
 
 
 def get_nights(strip_path=True, specprod_dir=None, sub_folder='exposures'):
-    """
+    """ Generate a list of nights in a given folder (default is exposures/)
+    Demands an 8 digit name beginning with 20
+
     Args:
         strip_path:  bool, optional; Strip the path to the nights folders
         rawdata_dir:
@@ -416,12 +350,20 @@ def get_nights(strip_path=True, specprod_dir=None, sub_folder='exposures'):
         specprod_dir = specprod_root()
     # Glob for nights
     sub_path = os.path.join(specprod_dir, sub_folder)
-    nights_path = glob.glob(sub_path+'/*')
-    # Strip off path?
-    if strip_path:
-        return [night_path.split('/')[-1] for night_path in nights_path]
-    else:
-        return nights_path
+    nights_with_path = glob.glob(sub_path+'/*')
+    # Strip off path
+    stripped = [os.path.basename(inight_path) for inight_path in nights_with_path]
+    # Vet and generate
+    nights = []
+    for ii,istrip in enumerate(stripped):
+        if (istrip[0:2] == '20') and len(istrip) == 8:
+            if strip_path:
+                nights.append(istrip)
+            else:
+                nights.append(nights_with_path[ii])
+    # Return
+    return sorted(nights)
+
 
 
 def rawdata_root():
@@ -446,20 +388,30 @@ def specprod_root():
     return os.path.join(os.getenv('DESI_SPECTRO_REDUX'), os.getenv('SPECPROD'))
 
 
-def get_pipe_plandir(specprod_dir=None):
-    """
-    Return the directory path for pipeline planning files.
+def qaprod_root():
+    """Return directory root for spectro production QA, i.e.
+    ``$DESI_SPECTRO_REDUX/$SPECPROD/QA``.
 
-    Args:
-        specprod_dir (str): Optional path to production directory.  If None,
-            the this is obtained from :func:`specprod_root`.
-
-    Returns (str):
-        the directory path for pipeline planning files.
+    Raises:
+        AssertionError: if these environment variables aren't set.
     """
-    if specprod_dir is None:
-        specprod_dir = specprod_root()
-    return os.path.join(os.path.abspath(specprod_dir), "plan")
+    assert 'SPECPROD' in os.environ, 'Missing $SPECPROD environment variable'
+    assert 'DESI_SPECTRO_REDUX' in os.environ, 'Missing $DESI_SPECTRO_REDUX environment variable'
+    return os.path.join(os.getenv('DESI_SPECTRO_REDUX'), os.getenv('SPECPROD'), 'QA')
+
+
+def get_pipe_database():
+    """Get the production database location based on the environment.
+
+    """
+    if "DESI_SPECTRO_DB" in os.environ:
+        # Use an alternate location for the DB
+        dbpath = os.environ["DESI_SPECTRO_DB"]
+    else:
+        proddir = specprod_root()
+        dbpath = os.path.join(proddir, "desi.db")
+        os.environ["DESI_SPECTRO_DB"] = dbpath
+    return dbpath
 
 
 def get_pipe_rundir(specprod_dir=None):
@@ -498,23 +450,21 @@ def get_pipe_logdir():
     return "logs"
 
 
-def get_pipe_faildir():
+def get_pipe_nightdir():
     """
-    Return the name of the subdirectory containing pipeline failures.
+    Return the name of the subdirectory containing per-night files.
 
     Returns (str):
         The name of the subdirectory.
     """
-    return "failed"
+    return "night"
 
 
-def get_pipe_redshiftdir():
+def get_pipe_pixeldir():
     """
-    Return the name of the subdirectory containing pipeline redshift
-    log files.
+    Return the name of the subdirectory containing per-pixel files.
 
     Returns (str):
         The name of the subdirectory.
     """
-    return "redshift"
-
+    return "healpix"

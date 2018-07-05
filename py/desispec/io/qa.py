@@ -11,11 +11,34 @@ import json
 
 from desiutil.io import yamlify
 
-from desispec.io import findfile
+from desispec.io import findfile, read_meta_frame
 from desispec.io.util import makepath
 from desiutil.log import get_logger
 # log=get_logger()
 
+def qafile_from_framefile(frame_file, qaprod_dir=None, output_dir=None):
+    """ Derive the QA filename from an input frame file
+    Args:
+        frame_file: str
+        output_dir: str, optional   Over-ride default output path
+        qa_dir: str, optional   Over-ride default QA
+
+    Returns:
+
+    """
+    frame_meta = read_meta_frame(frame_file)
+    night = frame_meta['NIGHT'].strip()
+    camera = frame_meta['CAMERA'].strip()
+    expid = frame_meta['EXPID']
+    if frame_meta['FLAVOR'] in ['flat', 'arc']:
+        qatype = 'qa_calib'
+    else:
+        qatype = 'qa_data'
+    # Name
+    qafile = findfile(qatype, night=night, camera=camera, expid=expid,
+                      outdir=output_dir, qaprod_dir=qaprod_dir)
+    # Return
+    return qafile, qatype
 
 def read_qa_data(filename):
     """Read data from a QA file
@@ -121,7 +144,7 @@ def write_qa_brick(outfile, qabrick):
     # Simple yaml
     ydict = yamlify(qabrick.data)
     with open(outfile, 'w') as yamlf:
-        yamlf.write( yaml.dump(ydict))#, default_flow_style=True) )
+        yamlf.write(yaml.dump(ydict))#, default_flow_style=True) )
 
     return outfile
 
@@ -183,7 +206,7 @@ def write_qa_exposure(outroot, qaexp, ret_dict=False):
     return outfile
 
 
-def load_qa_prod(inroot):
+def load_qa_multiexp(inroot):
     """Load QA for a given production
 
     Args:
@@ -205,30 +228,27 @@ def load_qa_prod(inroot):
     return odict
 
 
-def write_qa_prod(outroot, qaprod, indent=True):
+def write_qa_multiexp(outroot, qa_mexp, indent=True, skip_rebuild=False):
     """Write QA for a given production
 
     Args:
         outroot : str
           filename without format extension
         qa_prod : QA_Prod object
+        skip_rebuild : bool, optional
+          Do not rebuild the data dict
 
     Returns:
         outfile: str
           output filename
     """
-    from desiutil.io import combine_dicts
     log=get_logger()
     outfile = outroot+'.json'
     outfile = makepath(outfile, 'qa')
 
-    # Loop on exposures
-    odict = {}
-    for qaexp in qaprod.qa_exps:
-        # Get the exposure dict
-        idict = write_qa_exposure('foo', qaexp, ret_dict=True)
-        odict = combine_dicts(odict, idict)
-    ydict = yamlify(odict)  # This works well for JSON too
+    if not skip_rebuild:
+        qa_mexp.build_data()
+    ydict = yamlify(qa_mexp.data)  # This works well for JSON too
     # Simple json
     with open(outfile, 'wt') as fh:
         json.dump(ydict, fh, indent=indent)
@@ -249,12 +269,19 @@ def write_qa_ql(outfile, qaresult):
        Returns:
            outfile : str
     """
-    import yaml
-    from desiutil.io import yamlify
+    #import yaml
+    #from desiutil.io import yamlify
     # Take in QL input and output to yaml
+    #SE:  No yaml creation as of May 2018
     qadict = yamlify(qaresult)
-    f=open(outfile,"w")
-    f.write(yaml.dump(qadict))
+    #f=open(outfile,"w")
+    #f.write(yaml.dump(qadict))
+    #f.close()
+    
+    g=open(outfile,"w")
+    json.dump(qadict, g, sort_keys=True, indent=4)
+    g.close()    
+    
     return outfile
 
 

@@ -23,6 +23,7 @@ from desispec.frame import Frame
 from desispec.maskbits import specmask
 
 import desispec.scripts.mergebundles as mergebundles
+from desispec.specscore import compute_and_append_frame_scores
 
 
 def parse(options=None):
@@ -54,7 +55,10 @@ def parse(options=None):
     parser.add_argument("-v", "--verbose", action="store_true", help="print more stuff")
     parser.add_argument("--mpi", action="store_true", help="Use MPI for parallelism")
     parser.add_argument("--decorrelate-fibers", action="store_true", help="Not recommended")
-
+    parser.add_argument("--no-scores", action="store_true", help="Do not compute scores")
+    parser.add_argument("--psferr", type=float, default=None, required=False, 
+                        help="fractional PSF model error used to compute chi2 and mask pixels (default = value saved in psf file)")
+    
     args = None
     if options is None:
         args = parser.parse_args()
@@ -144,7 +148,7 @@ regularize: {regularize}
     results = ex2d(img.pix, img.ivar*(img.mask==0), psf, specmin, nspec, wave,
                  regularize=args.regularize, ndecorr=args.decorrelate_fibers,
                  bundlesize=bundlesize, wavesize=args.nwavestep, verbose=args.verbose,
-                 full_output=True, nsubbundles=args.nsubbundles)
+                   full_output=True, nsubbundles=args.nsubbundles,psferr=args.psferr)
     flux = results['flux']
     ivar = results['ivar']
     Rdata = results['resolution_data']
@@ -167,9 +171,18 @@ regularize: {regularize}
     frame = Frame(wave, flux, ivar, mask=mask, resolution_data=Rdata,
                 fibers=fibers, meta=img.meta, fibermap=fibermap,
                 chi2pix=chi2pix)
-
+    
+    #- Add unit
+    #   In specter.extract.ex2d one has flux /= dwave
+    #   to convert the measured total number of electrons per
+    #   wavelength node to an electron 'density'
+    frame.meta['BUNIT'] = 'electron/Angstrom' 
+    
+    #- Add scores to frame
+    if not args.no_scores :
+        compute_and_append_frame_scores(frame,suffix="RAW")
+    
     #- Write output
-    frame.meta['BUNIT'] = 'photon/bin'
     io.write_frame(args.output, frame)
 
     if args.model is not None:
@@ -184,7 +197,9 @@ regularize: {regularize}
 #- recent addition of mask and chi2pix code required nearly identical edits
 #- in two places.  Could main(args) just call main_mpi(args, comm=None) ?
 
-def main_mpi(args, comm=None):
+def main_mpi(args, comm=None, timing=None):
+
+    mark_start = time.time()
 
     log = get_logger()
 
@@ -211,6 +226,8 @@ def main_mpi(args, comm=None):
         img = comm.bcast(img, root=0)
 
     psf = load_psf(psf_file)
+
+    mark_read_input = time.time()
 
     # get spectral range
 
@@ -314,9 +331,15 @@ def main_mpi(args, comm=None):
     if comm is not None:
         comm.barrier()
 
+    mark_preparation = time.time()
+
+    time_total_extraction = 0.0
+    time_total_write_output = 0.0
+
     failcount = 0
 
     for b in range(myfirstbundle, myfirstbundle+mynbundle):
+        mark_iteration_start = time.time()
         outbundle = "{}_{:02d}.fits".format(outroot, b)
         outmodel = "{}_model_{:02d}.fits".format(outroot, b)
 
@@ -363,8 +386,18 @@ def main_mpi(args, comm=None):
                         fibers=bfibers, meta=img.meta, fibermap=bfibermap,
                         chi2pix=chi2pix)
 
+            #- Add unit
+            #   In specter.extract.ex2d one has flux /= dwave
+            #   to convert the measured total number of electrons per
+            #   wavelength node to an electron 'density'
+            frame.meta['BUNIT'] = 'electron/Angstrom' 
+            
+            #- Add scores to frame
+            compute_and_append_frame_scores(frame,suffix="RAW")
+
+            mark_extraction = time.time()
+            
             #- Write output
-            frame.meta['BUNIT'] = 'photon/bin'
             io.write_frame(outbundle, frame)
 
             if args.model is not None:
@@ -374,6 +407,12 @@ def main_mpi(args, comm=None):
             log.info('extract:  Done {} spectra {}:{} at {}'.format(os.path.basename(input_file),
                 bspecmin[b], bspecmin[b]+bnspec[b], time.asctime()))
             sys.stdout.flush()
+
+            mark_write_output = time.time()
+
+            time_total_extraction += mark_extraction - mark_iteration_start
+            time_total_write_output += mark_write_output - mark_extraction
+
         except:
             # Log the error and increment the number of failures
             log.error("extract:  FAILED bundle {}, spectrum range {}:{}".format(b, bspecmin[b], bspecmin[b]+bnspec[b]))
@@ -390,7 +429,9 @@ def main_mpi(args, comm=None):
         # all processes throw
         raise RuntimeError("some extraction bundles failed")
 
+    time_merge = None
     if rank == 0:
+        mark_merge_start = time.time()
         mergeopts = [
             '--output', args.output,
             '--force',
@@ -414,3 +455,14 @@ def main_mpi(args, comm=None):
                 os.remove(outmodel)
 
             fits.writeto(args.model, model)
+        mark_merge_end = time.time()
+        time_merge = mark_merge_end - mark_merge_start
+
+    # Resolve difference timer data
+
+    if type(timing) is dict:
+        timing["read_input"] = mark_read_input - mark_start
+        timing["preparation"] = mark_preparation - mark_read_input
+        timing["total_extraction"] = time_total_extraction
+        timing["total_write_output"] = time_total_write_output
+        timing["merge"] = time_merge

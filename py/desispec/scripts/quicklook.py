@@ -3,9 +3,10 @@ desispec.scripts.quicklook
 ===========================
 Command line wrapper for running a QL pipeline 
 
-S. Kama, G. Dhungana 
-SMU
-Spring 2016
+QuickLook team @Southern Methodist University (SMU) 
+First version Spring 2016
+Latest revision February 2018 
+
 """
 
 from __future__ import absolute_import, division, print_function
@@ -19,7 +20,7 @@ import desispec.io.image as imIO
 
 import os,sys
 import yaml
-
+import json
 import argparse
 
 def quietDesiLogger(loglvl=20):
@@ -35,18 +36,26 @@ def parse():
     parser.add_argument("-n","--night", type=str, required=False, help="night for the data")
     parser.add_argument("-c", "--camera", type=str, required=False, help= "camera for the raw data")
     parser.add_argument("-e","--expid", type=int, required=False, help="exposure id")
+    parser.add_argument("-p","--psfid", type=int, required=False, help="psf id")
+    parser.add_argument("-f","--flatid", type=int, required=False, help="flat id")
+    parser.add_argument("-t","--templateid", type=int, required=False, help="template id")
+    parser.add_argument("-m","--templatenight", type=int, required=False, help="template night")
     parser.add_argument("--rawdata_dir", type=str, required=False, help="rawdata directory. overrides $QL_SPEC_DATA in config")
     parser.add_argument("--specprod_dir",type=str, required=False, help="specprod directory, overrides $QL_SPEC_REDUX in config")
     parser.add_argument("--fullconfig", type=str, required=False, help="full expanded configfile")
     parser.add_argument("--save",type=str, required=False,help="save this full config to a file")
     parser.add_argument("--qlf",type=str,required=False,help="setup for QLF run", default=False)
-    parser.add_argument("--mergeQA", default=False, action='store_true',help="output Merged QA file")
+    parser.add_argument("--singleQA",type=str,required=False,help="choose one QA to run",default=None,dest="singqa")
     parser.add_argument("--loglvl",default=20,type=int,help="log level for quicklook (0=verbose, 50=Critical)")
 
     args=parser.parse_args()
     return args
 
 def ql_main(args=None):
+    
+    from desispec.util import set_backend
+    _matplotlib_backend = None
+    set_backend()
     from desispec.quicklook import quicklook,qllogger,qlconfig
     import desispec.image as image
     import desispec.frame as frame
@@ -58,11 +67,25 @@ def ql_main(args=None):
 
     qlog=qllogger.QLLogger(name="QuickLook",loglevel=args.loglvl)
     log=qlog.getlog()
-    # Sami
+    
     # quiet down DESI logs. We don't want DESI_LOGGER to print messages unless they are important
     # initalize singleton with WARNING level
     quietDesiLogger(args.loglvl+10)
     if args.config is not None:
+
+        #RS: have command line arguments for finding files via old datamodel
+        psfid=None
+        if args.psfid:
+            psfid=args.psfid
+        flatid=None
+        if args.flatid:
+            flatid=args.flatid
+        templateid=None
+        if args.templateid:
+            templateid=args.templateid
+        templatenight=None
+        if args.templatenight:
+            templatenight=args.templatenight
 
         if args.rawdata_dir:
             rawdata_dir = args.rawdata_dir
@@ -81,7 +104,7 @@ def ql_main(args=None):
         log.debug("Running Quicklook using configuration file {}".format(args.config))
         if os.path.exists(args.config):
             if "yaml" in args.config:
-                config=qlconfig.Config(args.config, args.night,args.camera, args.expid,rawdata_dir=rawdata_dir, specprod_dir=specprod_dir)
+                config=qlconfig.Config(args.config, args.night,args.camera, args.expid, args.singqa, rawdata_dir=rawdata_dir, specprod_dir=specprod_dir,psfid=psfid,flatid=flatid,templateid=templateid,templatenight=templatenight)
                 configdict=config.expand_config()
             else:
                 log.critical("Can't open config file {}".format(args.config))
@@ -107,13 +130,14 @@ def ql_main(args=None):
         if "yaml" in args.save:
             f=open(args.save,"w")
             yaml.dump(configdict,f)
+            
             log.info("Output saved for this configuration to {}".format(args.save))
             f.close()
         else:
             log.warning("Can save config to only yaml output. Put a yaml in the argument")
-        
+
     pipeline, convdict = quicklook.setup_pipeline(configdict)
-    res=quicklook.runpipeline(pipeline,convdict,configdict,mergeQA=args.mergeQA)
+    res=quicklook.runpipeline(pipeline,convdict,configdict)
     inpname=configdict["RawImage"]
     night=configdict["Night"]
     camera=configdict["Camera"]
@@ -147,8 +171,11 @@ def ql_main(args=None):
         else:
             finalname="fiberflat-{}-{:08d}.fits".format(camera,expid)
     else:
-        log.error("Result of pipeline is an unknown type {}. Don't know how to write".format(type(res)))
-        sys.exit("Unknown pipeline result type {}.".format(type(res)))
+        if args.singqa:
+            sys.exit()
+        else:
+            log.error("Result of pipeline is an unknown type {}. Don't know how to write".format(type(res)))
+            sys.exit("Unknown pipeline result type {}.".format(type(res)))
     log.info("Pipeline completed. Final result is in {}".format(finalname))
 
 if __name__=='__main__':

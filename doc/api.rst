@@ -22,15 +22,10 @@ Full desispec API Reference
 .. automodule:: desispec.database
     :members:
 
-.. This module will eventually go away, so comment it out for now to avoid
-.. Documentation build errors.
-.. .. automodule:: desispec.database.datachallenge
-..     :members:
-
 .. automodule:: desispec.database.metadata
     :members:
 
-.. automodule:: desispec.database.spectra
+.. automodule:: desispec.database.redshift
     :members:
 
 .. automodule:: desispec.database.util
@@ -105,22 +100,22 @@ Full desispec API Reference
 .. automodule:: desispec.pipeline
     :members:
 
-.. automodule:: desispec.pipeline.common
+.. automodule:: desispec.pipeline.defs
     :members:
 
-.. automodule:: desispec.pipeline.graph
+.. automodule:: desispec.pipeline.db
     :members:
 
-.. automodule:: desispec.pipeline.plan
+.. automodule:: desispec.pipeline.tasks.base
+    :members:
+
+.. automodule:: desispec.pipeline.prod
     :members:
 
 .. automodule:: desispec.pipeline.run
     :members:
 
-.. automodule:: desispec.pipeline.state
-    :members:
-
-.. automodule:: desispec.pipeline.task
+.. automodule:: desispec.pipeline.scriptgen
     :members:
 
 .. automodule:: desispec.preproc
@@ -225,13 +220,10 @@ Full desispec API Reference
 .. automodule:: desispec.scripts.night
     :members:
 
-.. automodule:: desispec.scripts.pipe_prod
+.. automodule:: desispec.scripts.pipe
     :members:
 
-.. automodule:: desispec.scripts.pipe_run
-    :members:
-
-.. automodule:: desispec.scripts.pipe_status
+.. automodule:: desispec.scripts.pipe_exec
     :members:
 
 .. automodule:: desispec.scripts.preproc

@@ -39,7 +39,7 @@ class TestQL_QA(unittest.TestCase):
 
     def tearDown(self):
         self.rawimage.close()
-        for filename in [self.framefile, self.rawfile, self.pixfile, self.xwfile, self.fibermapfile, self.skyfile, self.qafile, self.qafig]:
+        for filename in [self.framefile, self.rawfile, self.pixfile, self.xwfile, self.fibermapfile, self.skyfile, self.qafile, self.qajson, self.qafig]:
             if os.path.exists(filename):
                 os.remove(filename)
 
@@ -53,6 +53,7 @@ class TestQL_QA(unittest.TestCase):
         self.fibermapfile = 'test-fibermap-abcd.fits'
         self.skyfile = 'test-sky-abcd.fits'
         self.qafile = 'test_qa.yaml'
+        self.qajson = 'test_qa.json'
         self.qafig = 'test_qa.png'
 
         #- use specter psf for this test
@@ -62,14 +63,15 @@ class TestQL_QA(unittest.TestCase):
             "refKey":None,
             "param":{},
             "qso_resid":None
-        }
-        }
+            }}
 
         #- rawimage
 
         hdr = dict()
         hdr['CAMERA'] = 'z1'
         hdr['DATE-OBS'] = '2018-09-23T08:17:03.988'
+        hdr['PROGRAM'] = 'dark'
+        hdr['EXPTIME'] = 100
 
         #- Dimensions per amp
         ny = self.ny = 500
@@ -102,7 +104,8 @@ class TestQL_QA(unittest.TestCase):
         offset = {'1':100.0, '2':100.5, '3':50.3, '4':200.4}
         gain = {'1':1.0, '2':1.5, '3':0.8, '4':1.2}
         rdnoise = {'1':2.0, '2':2.2, '3':2.4, '4':2.6}
-        
+        obsrdn = {'1':3.4, '2':3.3, '3':3.6, '4':3.3}
+
         quad = {
             '1': np.s_[0:ny, 0:nx], '2': np.s_[0:ny, nx:nx+nx],
             '3': np.s_[ny:ny+ny, 0:nx], '4': np.s_[ny:ny+ny, nx:nx+nx],
@@ -112,7 +115,8 @@ class TestQL_QA(unittest.TestCase):
 
             hdr['GAIN'+amp] = gain[amp]
             hdr['RDNOISE'+amp] = rdnoise[amp]
-            
+            hdr['OBSRDN'+amp] = obsrdn[amp]
+
             xy = _parse_sec_keyword(hdr['BIASSEC'+amp])
             shape = [xy[0].stop-xy[0].start, xy[1].stop-xy[1].start]
             rawimage[xy] += offset[amp]
@@ -164,7 +168,7 @@ class TestQL_QA(unittest.TestCase):
         self.fibermap['OBJTYPE'][::7]='SKY'
         #- add a filter and arbitrary magnitude
         self.fibermap['MAG'][:29]=np.tile(np.random.uniform(18,20,29),5).reshape(29,5) #- Last fiber left
-        self.fibermap['FILTER'][:29]=np.tile(['DECAM_R','..','..','..','..'],(29,1)) #- last fiber left 
+        self.fibermap['FILTER'][:29]=np.tile(['DECAM_Z','..','..','..','..'],(29,1)) #- last fiber left 
 
         desispec.io.write_fibermap(self.fibermapfile, self.fibermap)
 
@@ -177,7 +181,8 @@ class TestQL_QA(unittest.TestCase):
         ivar=np.ones_like(flux)
         resolution_data=np.ones((nspec,13,nwave))
         self.frame=desispec.frame.Frame(wave,flux,ivar,resolution_data=resolution_data,fibermap=self.fibermap)
-        self.frame.meta = dict(CAMERA=self.camera,PROGRAM='dark',FLAVOR='science',NIGHT=self.night,EXPID=self.expid,EXPTIME=100,CCDSEC1=self.ccdsec1,CCDSEC2=self.ccdsec2,CCDSEC3=self.ccdsec3,CCDSEC4=self.ccdsec4)
+        self.frame.meta =  hdr
+        self.frame.meta['WAVESTEP']=0.5
         desispec.io.write_frame(self.framefile, self.frame)
 
         #- make a skymodel
@@ -279,6 +284,7 @@ class TestQL_QA(unittest.TestCase):
         qargs["qafile"]=self.qafile
         qargs["qafig"]=self.qafig
         qargs["paname"]="abc"
+        qargs["singleqa"]=None
         res1=qa(inp,**qargs)
         self.assertEqual(len(res1['METRICS']['BIAS_AMP']),4)
 
@@ -299,6 +305,7 @@ class TestQL_QA(unittest.TestCase):
         qargs["paname"]="abc"
         qargs["qafile"]=self.qafile
         qargs["qafig"]=self.qafig
+        qargs["singleqa"]=None
         resl=qa(inp,**qargs)
         self.assertTrue("yaml" in qargs["qafile"])
         self.assertTrue("png" in qargs["qafig"])
@@ -354,14 +361,16 @@ class TestQL_QA(unittest.TestCase):
         qa=QA.Calc_XWSigma('xwsigma',self.config)
         inp=xwimage
         qargs={}
+        qargs["Flavor"]='science'
         qargs["PSFFile"]=self.psf
         qargs["FiberMap"]=self.fibermap
         qargs["camera"]=self.camera
         qargs["expid"]=self.expid
         qargs["amps"]=False
         qargs["paname"]="abc"
+        qargs["singleqa"]=None
         resl=qa(inp,**qargs)
-        self.assertTrue(np.all(resl["METRICS"]["XSIGMA"])>0)
+        self.assertTrue(len(resl["METRICS"]["XWSIGMA"].ravel())==2)
 
     def testCountPixels(self):
         qa=QA.Count_Pixels('countpix',self.config)
@@ -372,12 +381,12 @@ class TestQL_QA(unittest.TestCase):
         qargs["expid"]=self.expid
         qargs["amps"]=False
         qargs["paname"]="abc"
+        qargs["singleqa"]=None
         resl=qa(inp,**qargs)
-        self.assertTrue(resl['METRICS']['NPIX_LOW'] > resl['METRICS']['NPIX_HIGH'])
         #- test if amp QAs exist
         qargs["amps"] = True
         resl2=qa(inp,**qargs)
-        self.assertTrue(len(resl2['METRICS']['NPIX_AMP'])==4)
+        self.assertTrue(len(resl2['METRICS']['LITFRAC_AMP'])==4)
 
     def testCountSpectralBins(self):
         qa=QA.CountSpectralBins('countbins',self.config)
@@ -390,11 +399,11 @@ class TestQL_QA(unittest.TestCase):
         qargs["amps"]=True
         qargs["paname"]="abc"
         qargs["qafile"]=self.qafile
-        qargs["qafig"]=self.qafig
+        qargs["qafig"]=None
+        qargs["singleqa"]=None
         resl=qa(inp,**qargs)
-        self.assertTrue(np.all(resl["METRICS"]["NBINSMED"]-resl["METRICS"]["NBINSHIGH"])>=0)
-        self.assertTrue(np.all(resl["METRICS"]["NBINSLOW"]-resl["METRICS"]["NBINSMED"])>=0)
-        self.assertLess(resl["BOTTOM_MAX_WAVE_INDEX"],resl["TOP_MIN_WAVE_INDEX"])
+        self.assertTrue(resl["METRICS"]["GOOD_FIBER"].shape[0]==inp.nspec)
+        self.assertTrue((resl["METRICS"]["NGOODFIB"])<=inp.nspec)
 
     def testSkyCont(self):
         qa=QA.Sky_Continuum('skycont',self.config)
@@ -403,16 +412,14 @@ class TestQL_QA(unittest.TestCase):
         qargs["FiberMap"]=self.fibermap
         qargs["camera"]=self.camera
         qargs["expid"]=self.expid
-        qargs["amps"]=False
         qargs["paname"]="abc"
+        qargs["singleqa"]=None
+        qargs["param"]={'B_CONT': ["4000, 4500", "5250, 5550"],
+                     'R_CONT': ["5950, 6200", "6990, 7230"],
+                     'Z_CONT': ["8120, 8270", "9110, 9280"]}
         resl=qa(inp,**qargs)
         self.assertTrue(resl["METRICS"]["SKYFIBERID"]==[0,7,14,21,28]) #- as defined in the fibermap
         self.assertTrue(resl["METRICS"]["SKYCONT"]>0)
-        #- Test for amp True Case
-        qargs["amps"]=True
-        qargs["dict_countbins"]=self.map2pix #- This is not the full dict but contains the map needed here.
-        resl2=qa(inp,**qargs)
-        self.assertTrue(np.all(resl2["METRICS"]["SKYCONT_AMP"])>0)
         
     def testSkyPeaks(self):
         qa=QA.Sky_Peaks('skypeaks',self.config)
@@ -421,12 +428,12 @@ class TestQL_QA(unittest.TestCase):
         qargs["FiberMap"]=self.fibermap
         qargs["camera"]=self.camera
         qargs["expid"]=self.expid
-        #qargs["amps"]=True
         qargs["paname"]="abc"
         qargs["dict_countbins"]=self.map2pix
+        qargs["singleqa"]=None
         resl=qa(inp,**qargs)
         #self.assertTrue(np.all(resl['METRICS']['PEAKCOUNT_RMS_AMP'])>=0.)
-        self.assertTrue(resl['METRICS']['PEAKCOUNT_RMS']>0)
+        self.assertTrue(resl['METRICS']['PEAKCOUNT_NOISE']>0)
 
     def testIntegrateSpec(self):
         qa=QA.Integrate_Spec('integ',self.config)
@@ -436,17 +443,11 @@ class TestQL_QA(unittest.TestCase):
         qargs["FiberMap"]=self.fibermap
         qargs["camera"]=self.camera
         qargs["expid"]=self.expid
-        qargs["amps"]=False
         qargs["paname"]="abc"
         qargs["dict_countbins"]=self.map2pix
+        qargs["singleqa"]=None
         resl=qa(inp,**qargs)
-        self.assertTrue(resl['METRICS']['INTEG_AVG'] >0)
-        self.assertTrue(len(resl["METRICS"]["INTEG"])==len(resl["METRICS"]["STD_FIBERID"]))
-        #- Test for amps
-        qargs["amps"]=True
-        qargs["dict_countbins"]=self.map2pix
-        resl2=qa(inp,**qargs)
-        self.assertTrue(np.all(resl2["METRICS"]["INTEG_AVG_AMP"])>0)
+        self.assertTrue(len(resl["METRICS"]["STD_FIBERID"])>0)
         
     def testSkyResidual(self):
         qa=QA.Sky_Residual('skyresid',self.config)
@@ -457,9 +458,9 @@ class TestQL_QA(unittest.TestCase):
         qargs["FiberMap"]=self.fibermap
         qargs["camera"]=self.camera
         qargs["expid"]=self.expid
-        qargs["amps"]=True
         qargs["paname"]="abc"
         qargs["dict_countbins"]=self.map2pix
+        qargs["singleqa"]=None
         resl=qa(inp,sky,**qargs)
         self.assertTrue(resl["METRICS"]["NREJ"]==self.skymodel.nrej)
         self.assertTrue(len(resl["METRICS"]["MED_RESID_WAVE"]) == self.nwave)
@@ -468,7 +469,7 @@ class TestQL_QA(unittest.TestCase):
         #- test with different parameter set:
         qargs["param"]={"BIN_SZ":0.2, "PCHI_RESID":0.05, "PER_RESID":95., "SKYRESID_NORMAL_RANGE":[-5.0, 5.0], "SKYRESID_WARN_RANGE":[-10.0, 10.0]}
         resl2=qa(inp,sky,**qargs)
-        self.assertTrue(len(resl["METRICS"]["DEVS_1D"])>len(resl2["METRICS"]["DEVS_1D"])) #- larger histogram bin size than default 0.1
+        #self.assertTrue(len(resl["METRICS"]["DEVS_1D"])>len(resl2["METRICS"]["DEVS_1D"])) #- larger histogram bin size than default 0.1
 
     def testCalculateSNR(self):
         qa=QA.Calculate_SNR('snr',self.config)
@@ -478,10 +479,10 @@ class TestQL_QA(unittest.TestCase):
         qargs["FiberMap"]=self.fibermap
         qargs["camera"]=self.camera
         qargs["expid"]=self.expid
-        qargs["amps"]=True
         qargs["paname"]="abc"
         qargs["qafile"]=self.qafile #- no LRG by construction.
         qargs["dict_countbins"]=self.map2pix
+        qargs["singleqa"]=None
         resl=qa(inp,**qargs)
         self.assertTrue("yaml" in qargs["qafile"])
         self.assertTrue(len(resl["METRICS"]["MEDIAN_SNR"])==self.nspec) #- positive definite

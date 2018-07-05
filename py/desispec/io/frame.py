@@ -58,8 +58,8 @@ def write_frame(outfile, frame, header=None, fibermap=None, units=None):
     if units is not None:
         units = str(units)
         if 'BUNIT' in hdr and hdr['BUNIT'] != units:
-            log.warn('BUNIT {bunit} != units {units}; using {units}'.format(
-                    bunit=hdr['BUNIT'], units=units))
+            log.warning('BUNIT {bunit} != units {units}; using {units}'.format(
+                        bunit=hdr['BUNIT'], units=units))
         x.header['BUNIT'] = units
     hdus.append(x)
 
@@ -70,8 +70,8 @@ def write_frame(outfile, frame, header=None, fibermap=None, units=None):
     if frame.resolution_data is not None:
         hdus.append( fits.ImageHDU(frame.resolution_data.astype('f4'), name='RESOLUTION' ) )
     elif frame.wsigma is not None:
-        log.debug("Using sigma widths from QUICKRESOLUTION") 
-        qrimg=fits.ImageHDU(frame.wsigma.astype('f4'), name='QUICKRESOLUTION' ) 
+        log.debug("Using sigma widths from QUICKRESOLUTION")
+        qrimg=fits.ImageHDU(frame.wsigma.astype('f4'), name='QUICKRESOLUTION' )
         qrimg.header["NDIAG"] =frame.ndiag
         hdus.append(qrimg)
     if fibermap is not None:
@@ -90,6 +90,19 @@ def write_frame(outfile, frame, header=None, fibermap=None, units=None):
     if frame.chi2pix is not None:
         hdus.append( fits.ImageHDU(frame.chi2pix.astype('f4'), name='CHI2PIX' ) )
 
+    if frame.scores is not None :
+        scores_tbl = encode_table(frame.scores)  #- unicode -> bytes
+        scores_tbl.meta['EXTNAME'] = 'SCORES'
+        hdus.append( fits.convenience.table_to_hdu(scores_tbl) )
+        if frame.scores_comments is not None : # add comments in header
+            hdu=hdus['SCORES']
+            for i in range(1,999):
+                key = 'TTYPE'+str(i)
+                if key in hdu.header:
+                    value = hdu.header[key]
+                    if value in frame.scores_comments.keys() :
+                        hdu.header[key] = (value, frame.scores_comments[value])
+
     hdus.writeto(outfile+'.tmp', clobber=True, checksum=True)
     os.rename(outfile+'.tmp', outfile)
 
@@ -106,12 +119,12 @@ def read_meta_frame(filename, extname=0):
         meta: dict or astropy.fits.header
 
     """
-    fx = fits.open(filename, uint=True, memmap=False)
-    hdr = fx[extname].header
+    with fits.open(filename, uint=True, memmap=False) as fx:
+        hdr = fx[extname].header
     return hdr
 
 
-def read_frame(filename, nspec=None):
+def read_frame(filename, nspec=None, skip_resolution=False):
     """Reads a frame fits file and returns its data.
 
     Args:
@@ -119,6 +132,8 @@ def read_frame(filename, nspec=None):
             night = string YEARMMDD
             expid = integer exposure ID
             camera = b0, r1, .. z9
+        skip_resolution: bool, option
+            Speed up read time (>5x) by avoiding the Resolution matrix
 
     Returns:
         desispec.Frame object with attributes wave, flux, ivar, etc.
@@ -143,16 +158,24 @@ def read_frame(filename, nspec=None):
     else:
         mask = None   #- let the Frame object create the default mask
 
+    # Init
     resolution_data=None
     qwsigma=None
     qndiag=None
-    if 'RESOLUTION' in fx:
+    fibermap = None
+    chi2pix = None
+    scores = None
+    scores_comments = None
+
+    if skip_resolution:
+        pass
+    elif 'RESOLUTION' in fx:
         resolution_data = native_endian(fx['RESOLUTION'].data.astype('f8'))
     elif 'QUICKRESOLUTION' in fx:
         qr=fx['QUICKRESOLUTION'].header
         qndiag =qr['NDIAG']
         qwsigma=native_endian(fx['QUICKRESOLUTION'].data.astype('f4'))
-        
+
     if 'FIBERMAP' in fx:
         fibermap = fx['FIBERMAP'].data
     else:
@@ -162,6 +185,18 @@ def read_frame(filename, nspec=None):
         chi2pix = native_endian(fx['CHI2PIX'].data.astype('f8'))
     else:
         chi2pix = None
+
+    if 'SCORES' in fx:
+        scores = fx['SCORES'].data
+        # I need to open the header to read the comments
+        scores_comments = dict()
+        head   = fx['SCORES'].header
+        for i in range(1,len(scores.columns)+1) :
+            k='TTYPE'+str(i)
+            scores_comments[head[k]]=head.comments[k]
+    else:
+        scores = None
+        scores_comments = None
 
     fx.close()
 
@@ -179,7 +214,8 @@ def read_frame(filename, nspec=None):
 
     # return flux,ivar,wave,resolution_data, hdr
     frame = Frame(wave, flux, ivar, mask, resolution_data, meta=hdr, fibermap=fibermap, chi2pix=chi2pix,
-                  wsigma=qwsigma,ndiag=qndiag)
+                  scores=scores,scores_comments=scores_comments,
+                  wsigma=qwsigma,ndiag=qndiag, suppress_res_warning=skip_resolution)
 
     # Vette
     diagnosis = frame.vet()

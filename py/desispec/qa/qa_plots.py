@@ -6,6 +6,7 @@ import os
 import numpy as np
 from scipy import signal
 import scipy
+import scipy.stats
 import pdb
 import copy
 
@@ -21,7 +22,7 @@ import matplotlib.gridspec as gridspec
 from desispec import util
 from desispec.io import makepath
 
-from desiutil.plots import plot_slices as du_pslices
+from desiutil import plots as desiu_p
 
 from desispec.io import read_params
 desi_params = read_params()
@@ -109,11 +110,11 @@ def frame_skyres(outfil, frame, skymodel, qaframe, quick_look=False):
     wavg_ivar = np.sum(res_ivar,0)
     chi2_wavg = np.sum(wavg_res**2 * wavg_ivar)
     dof_wavg = np.sum(wavg_ivar > 0.)
-    pchi2_wavg = scipy.stats.chisqprob(chi2_wavg, dof_wavg)
+    pchi2_wavg = scipy.stats.distributions.chi2.sf(chi2_wavg, dof_wavg)
     chi2_med = np.sum(med_res**2 * wavg_ivar)
-    pchi2_med = scipy.stats.chisqprob(chi2_med, dof_wavg)
+    pchi2_med = scipy.stats.distributions.chi2.sf(chi2_med, dof_wavg)
     '''
-    skyfibers = np.array(qaframe.qa_data['SKYSUB']["METRICS"]["SKY_FIBERID"])
+    skyfibers = np.array(qaframe.qa_data['SKYSUB']["METRICS"]["SKYFIBERID"])
     subtract_sky(frame, skymodel)
     res=frame.flux[skyfibers]
     res_ivar=frame.ivar[skyfibers]
@@ -545,7 +546,7 @@ def exposure_map(x,y,metric,mlbl=None, outfile=None, title=None):
     if title is not None:
         ax.set_title(title)
 
-    mplt = ax.scatter(x, y, marker='o', s=9., c=metric, cmap=jet)
+    mplt = ax.scatter(x,y,marker='o', s=9., c=metric.reshape(x.shape), cmap=jet)
     #mplt.set_clim(vmin=med_mean-2*rms_mean, vmax=med_mean+2*rms_mean)
     cb = fig.colorbar(mplt)
     cb.set_label('Mean Flux')
@@ -964,15 +965,15 @@ def skysub_resid_dual(sky_wave, sky_flux, sky_res, outfile=None, pp=None,
 
     # Wavelength
     ax_wave = plt.subplot(gs[0])
-    du_pslices(sky_wave, sky_res, np.min(sky_wave), np.max(sky_wave),
-               0., num_slices=nslices, axis=ax_wave)
+    desiu_p.plot_slices(sky_wave, sky_res, np.min(sky_wave), np.max(sky_wave),
+               0., num_slices=nslices, axis=ax_wave, scatter=False)
     ax_wave.set_xlabel('Wavelength')
     ax_wave.set_ylabel('Residual Flux')
 
     # Wavelength
     ax_flux = plt.subplot(gs[1])
-    du_pslices(sky_flux, sky_res, np.min(sky_flux), np.max(sky_flux),
-               0., num_slices=nslices, axis=ax_flux, set_ylim_from_stats=True)
+    desiu_p.plot_slices(sky_flux, sky_res, np.min(sky_flux), np.max(sky_flux),
+               0., num_slices=nslices, axis=ax_flux, set_ylim_from_stats=True, scatter=False)
     ax_flux.set_xlabel('log10(Sky Flux)')
     ax_flux.set_ylabel('Residual Flux')
     #ax_flux.set_ylim(-600, 100)
@@ -1018,13 +1019,13 @@ def skysub_resid_series(sky_dict, xtype, outfile=None, pp=None,
         ax = plt.subplot(gs[kk])
         #ax.set_ylabel('Residual Flux')
         if xtype == 'wave': # Wavelength
-            du_pslices(sky_wave, sky_res, np.min(sky_wave), np.max(sky_wave),
-               0., num_slices=nslices, axis=ax)
+            desiu_p.plot_slices(sky_wave, sky_res, np.min(sky_wave), np.max(sky_wave),
+               0., num_slices=nslices, axis=ax, scatter=False)
             xlbl = 'Wavelength'
         elif xtype == 'flux': # Flux
             xlbl = 'log10(Sky Flux)'
-            du_pslices(sky_flux, sky_res, np.min(sky_flux), np.max(sky_flux),
-               0., num_slices=nslices, axis=ax, set_ylim_from_stats=True)
+            desiu_p.plot_slices(sky_flux, sky_res, np.min(sky_flux), np.max(sky_flux),
+               0., num_slices=nslices, axis=ax, set_ylim_from_stats=True, scatter=False)
             if kk == sky_dict['count']-1:
                 ax.set_xlabel('Wavelength')
             else:

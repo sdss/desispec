@@ -13,6 +13,9 @@ from desispec.util import runcmd
 from desispec.io.raw import write_raw
 from desispec.io import empty_fibermap
 from desispec.io.fibermap import write_fibermap
+import datetime
+import pytz
+from pkg_resources import resource_filename
 
 class TestQL(unittest.TestCase):
     @classmethod
@@ -22,12 +25,13 @@ class TestQL(unittest.TestCase):
         cls.night = night = '20150105'
         cls.camera = camera = 'r0'
         cls.expid = expid = 314
-        cls.flatExpid = flatExpid = 313
-        cls.templateExpid = templateExpid = 312
+        cls.psfExpid = psfExpid = 313
+        cls.flatExpid = flatExpid = 312
+        cls.templateExpid = templateExpid = 311
         cls.nspec = nspec = 5
         cls.exptime = exptime = 100
 
-        #- Seup environment and override default environment variables
+        #- Setup environment and override default environment variables
 
         #- python 2.7 location:
         cls.topDir = os.path.dirname( # top-level
@@ -64,25 +68,35 @@ class TestQL(unittest.TestCase):
         cls.framefile = 'frame-'+id+'.fits'
 
         cls.testDir = testDir = os.path.join(os.environ['HOME'],'ql_test_io')
-        dataDir = os.path.join(testDir,night)
+        datanightDir = os.path.join(testDir,night)
+        dataDir = os.path.join(datanightDir,'{:08d}'.format(expid))
         expDir = os.path.join(testDir,'exposures')
-        nightDir = os.path.join(expDir,night)
-        reduxDir = os.path.join(nightDir,'{:08d}'.format(expid))
+        expnightDir = os.path.join(expDir,night)
+        reduxDir = os.path.join(expnightDir,'{:08d}'.format(expid))
+        calibDir = os.path.join(testDir, 'ql_calib')
+        configDir = os.path.join(testDir, 'ql_config')
+        os.environ['QL_CALIB_DIR'] = calibDir
+        os.environ['QL_CONFIG_DIR'] = configDir
         if not os.path.exists(testDir):
             os.makedirs(testDir)
+            os.makedirs(datanightDir)
             os.makedirs(dataDir)
             os.makedirs(expDir)
-            os.makedirs(nightDir)
+            os.makedirs(expnightDir)
             os.makedirs(reduxDir)
+            os.makedirs(calibDir)
+            os.makedirs(configDir)
 
         #- Write dummy configuration and input files to test merging
         configdict = {'name': 'Test Configuration',
                       'Program': program,
                       'Flavor': flavor,
-                      'PSFType': 'psfboot',
+                      'PSFExpid': psfExpid,
+                      'PSFType': 'psf',
                       'FiberflatExpid': flatExpid,
                       'TemplateExpid': templateExpid,
-                      'WritePixfile': False,
+                      'TemplateNight': night,
+                      'WritePreprocfile': False,
                       'WriteSkyModelfile': False,
                       'WriteIntermediatefiles': False,
                       'WriteStaticPlots': False,
@@ -92,12 +106,12 @@ class TestQL(unittest.TestCase):
                       'Timeout': 120.0,
                       'Pipeline': ['Initialize','Preproc'],
                       'Algorithms': {'Initialize':{
-                                         'QA':{
-                                             'Bias_From_Overscan':{'PARAMS':{'PERCENTILES':[68.2,95.4,99.7],'DIFF_WARN_RANGE':[-1.0,1.0],'DIFF_ALARM_RANGE':[-2.0,2.0]}}}},
+                                         'QA':{'Check_HDUs':{'PARAMS':{}}
+                                             }},
                                      'Preproc':{
-                                         'QA':{
-                                             'Get_RMS':{'PARAMS':{'RMS_WARN_RANGE':[-1.0,1.0],'RMS_ALARM_RANGE':[-2.0,2.0]}},
-                                             'Count_Pixels':{'PARAMS':{'CUTHI':500,'CUTLO':100,'NPIX_WARN_RANGE':[200.0,500.0],'NPIX_ALARM_RANGE':[50.0,650.0]}}}}}
+                                         'QA':{'Bias_From_Overscan':{'PARAMS':{'DIFF_WARN_RANGE':[-1.0,1.0],'DIFF_ALARM_RANGE':[-2.0,2.0]}},
+                                             'Get_RMS':{'PARAMS':{'PERCENTILES':[68.2,95.4,99.7],'RMS_WARN_RANGE':[-1.0,1.0],'RMS_ALARM_RANGE':[-2.0,2.0]}},
+                                             'Count_Pixels':{'PARAMS':{'CUTPIX':500,'LITFRAC_NORMAL_RANGE':[200.0,500.0],'LITFRAC_WARN_RANGE':[50.0,650.0]}}}}}
                       }
         with open('{}/test_config.yaml'.format(testDir),'w') as config:
             yaml.dump(configdict,config)
@@ -150,6 +164,17 @@ class TestQL(unittest.TestCase):
         fibermap = empty_fibermap(nspec)
         write_fibermap(fibermapfile,fibermap)
 
+        #- Generate calib data
+        for camera in ['b0', 'r0', 'z0']:
+            #- Fiberflat has to exist but can be a dummpy file
+            filename = '{}/fiberflat-{}.fits'.format(calibDir, camera)
+            fx = open(filename, 'w'); fx.write('fiberflat file'); fx.close()
+
+            #- PSF has to be real file
+            psffile = '{}/psf-{}.fits'.format(calibDir, camera)
+            example_psf = resource_filename('desispec', 'test/data/ql/psf-{}.fits'.format(camera))
+            shutil.copy(example_psf, psffile)
+
    #- Clean up test files and directories if they exist
     @classmethod
     def tearDown(cls):
@@ -160,11 +185,25 @@ class TestQL(unittest.TestCase):
             shutil.rmtree(cls.testDir)
 
     #- Test if QuickLook outputs merged QA file
-    def test_mergeQA(self):
+    #def test_mergeQA(self):
+        #os.environ['QL_SPEC_REDUX'] = self.testDir
+        #cmd = "{} {}/desi_quicklook -i {} -n {} -c {} -e {} --rawdata_dir {} --specprod_dir {} --mergeQA".format(sys.executable,self.binDir,self.configfile,self.night,self.camera,self.expid,self.testDir,self.testDir)
+        #pyver = format(sys.executable.split('anaconda')[1])
+        #print('NOTE: Test is running on python v'+format(pyver.split('/')[0]))
+        
+        #if int(format(pyver.split('/')[0])) < 3:
+             #pass
+        #else:
+           #if runcmd(cmd) != 0:
+              #raise RuntimeError('quicklook pipeline failed')
+
+
+    def test_QA(self):
         os.environ['QL_SPEC_REDUX'] = self.testDir
-        cmd = "{} {}/desi_quicklook -i {} -n {} -c {} -e {} --rawdata_dir {} --specprod_dir {} --mergeQA".format(sys.executable,self.binDir,self.configfile,self.night,self.camera,self.expid,self.testDir,self.testDir)
+        cmd = "{} {}/desi_quicklook -i {} -n {} -c {} -e {} --rawdata_dir {} --specprod_dir {} ".format(sys.executable,self.binDir,self.configfile,self.night,self.camera,self.expid,self.testDir,self.testDir)
+ 
         if runcmd(cmd) != 0:
-            raise RuntimeError('quicklook pipeline failed')
+              raise RuntimeError('quicklook pipeline failed')
 
 
 #- This runs all test* functions in any TestCase class in this file

@@ -1,8 +1,9 @@
 """
 Run integration tests from pixsim through redshifts
 
-python -m desispec.test.integration_test
+python -m desispec.test.old_integration_test
 """
+
 from __future__ import absolute_import, print_function
 import os
 import time
@@ -13,7 +14,7 @@ from astropy.io import fits
 from ..util import runcmd
 from .. import io
 from ..qa import QA_Exposure
-from ..database.datachallenge import get_options, setup_db, load_zcat
+from ..database.redshift import get_options, setup_db, load_zbest
 
 from desiutil.log import get_logger
 
@@ -98,16 +99,27 @@ def integration_test(night=None, nspec=5, clobber=False):
         if runcmd(cmd, inputs=inputs, outputs=outputs, clobber=clobber) != 0:
             raise RuntimeError('pixsim newexp failed for {} exposure {}'.format(program, expid))
 
-        cmd = "pixsim --preproc --nspec {nspec} --night {night} --expid {expid}".format(expid=expid, **params)
+        cmd = "pixsim --nspec {nspec} --night {night} --expid {expid}".format(expid=expid, **params)
         inputs = [fibermap, simspec]
-        outputs = list()
-        outputs.append(fibermap.replace('fibermap-', 'simpix-'))
-        for camera in cameras:
-            pixfile = io.findfile('pix', night, expid, camera)
-            outputs.append(pixfile)
-            # outputs.append(os.path.join(os.path.dirname(pixfile), os.path.basename(pixfile).replace('pix-', 'simpix-')))
+        outputs = [fibermap.replace('fibermap-', 'simpix-'), ]
         if runcmd(cmd, inputs=inputs, outputs=outputs, clobber=clobber) != 0:
             raise RuntimeError('pixsim failed for {} exposure {}'.format(program, expid))
+
+    #-----
+    #- Preproc
+
+    for expid, program in enumerate(programs):
+        rawfile = io.findfile('desi', night, expid)
+        outdir = os.path.dirname(io.findfile('preproc', night, expid, 'b0'))
+        cmd = "desi_preproc --infile {} --outdir {}".format(rawfile, outdir)
+
+        inputs = [rawfile,]
+        outputs = list()
+        for camera in cameras:
+            outputs.append(io.findfile('preproc', night, expid, camera))
+
+        if runcmd(cmd, inputs=inputs, outputs=outputs, clobber=clobber) != 0:
+            raise RuntimeError('preproc failed for expid {}'.format(expid))
 
     #-----
     #- Extract
@@ -115,7 +127,7 @@ def integration_test(night=None, nspec=5, clobber=False):
     waverange = dict(b="3570,5940,1.0", r="5630,7740,1.0", z="7440,9830,1.0")
     for expid, program in enumerate(programs):
         for ic, channel in enumerate(channels):
-            pixfile = io.findfile('pix', night, expid, cameras[ic])
+            pixfile = io.findfile('preproc', night, expid, cameras[ic])
             fiberfile = io.findfile('fibermap', night, expid)
             psffile = '{}/data/specpsf/psf-{}.fits'.format(os.getenv('DESIMODEL'), channel)
             framefile = io.findfile('frame', night, expid, cameras[ic])
@@ -291,11 +303,11 @@ def integration_test(night=None, nspec=5, clobber=False):
     #
     # Load redshifts into database
     #
-    options = get_options('--clobber', '--filename', 'dailytest.db',
+    options = get_options('--overwrite', '--filename', 'dailytest.db',
                           os.path.join(os.environ['DESI_SPECTRO_REDUX'],
                                        os.environ['SPECPROD']))
     postgresql = setup_db(options)
-    load_zcat(options.datapath)
+    load_zbest(options.datapath)
     # ztruth QA
     # qafile = io.findfile('qa_ztruth', night)
     # qafig = io.findfile('qa_ztruth_fig', night)
@@ -357,7 +369,6 @@ def integration_test(night=None, nspec=5, clobber=False):
                 pix, truetype, truez, objtype, z, zwarn, status))
 
     print("--------------------------------------------------")
-
 
 if __name__ == '__main__':
     from sys import exit
