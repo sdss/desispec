@@ -21,7 +21,7 @@ from .maskbits import specmask
 
 def get_exp2healpix_map(nights=None, specprod_dir=None, nside=64, comm=None):
     '''
-    Returns table with columns NIGHT EXPID SPECTRO HEALPIX NTARGETS 
+    Returns table with columns NIGHT EXPID SPECTRO HEALPIX NTARGETS
 
     Options:
         nights: list of YEARMMDD to scan for exposures
@@ -42,10 +42,10 @@ def get_exp2healpix_map(nights=None, specprod_dir=None, nside=64, comm=None):
 
     if nights is None and rank == 0:
         nights = io.get_nights(specprod_dir=specprod_dir)
-    
+
     if comm:
         nights = comm.bcast(nights, root=0)
-   
+
     #-----
     #- Distribute nights over ranks, scanning their exposures to build
     #- map of exposures -> healpix
@@ -69,7 +69,7 @@ def get_exp2healpix_map(nights=None, specprod_dir=None, nside=64, comm=None):
                 #- parse 'path/night/expid/cframe-r0-12345678.fits'
                 camera = os.path.basename(filename).split('-')[1]
                 channel, spectro = camera[0], int(camera[1])
-            
+
                 #- skip if we already have this expid/spectrograph
                 if (night, expid, spectro) in night_expid_spectro:
                     continue
@@ -81,9 +81,9 @@ def get_exp2healpix_map(nights=None, specprod_dir=None, nside=64, comm=None):
                 sys.stdout.flush()
 
                 #- Determine healpix, allowing for NaN
-                columns = ['RA_TARGET', 'DEC_TARGET']
+                columns = ['TARGET_RA', 'TARGET_DEC']
                 fibermap = fitsio.read(filename, 'FIBERMAP', columns=columns)
-                ra, dec = fibermap['RA_TARGET'], fibermap['DEC_TARGET']
+                ra, dec = fibermap['TARGET_RA'], fibermap['TARGET_DEC']
                 ok = ~np.isnan(ra) & ~np.isnan(dec)
                 ra, dec = ra[ok], dec[ok]
                 allpix = desimodel.footprint.radec2pix(nside, ra, dec)
@@ -143,12 +143,12 @@ class FrameLite(object):
         self.fibermap = fibermap
         self.header = header
         self.scores = scores
-    
+
     def __getitem__(self, index):
         '''Return a subset of the original FrameLight'''
         if not isinstance(index, slice):
             index = np.atleast_1d(index)
-        
+
         if self.scores:
             scores = self.scores[index]
         else:
@@ -157,7 +157,7 @@ class FrameLite(object):
         return FrameLite(self.wave, self.flux[index], self.ivar[index],
             self.mask[index], self.rdat[index], self.fibermap[index],
             self.header, scores)
-    
+
     @classmethod
     def read(cls, filename):
         '''
@@ -246,7 +246,7 @@ class SpectraLite(object):
         self.rdat = rdat.copy()
         self.fibermap = fibermap
         self.scores = scores
-    
+
     def __add__(self, other):
         '''
         concatenate two SpectraLite objects into one
@@ -256,7 +256,7 @@ class SpectraLite(object):
             assert np.all(self.wave[x] == other.wave[x])
         if self.scores is not None:
             assert other.scores is not None
-        
+
         bands = self.bands
         wave = self.wave
         flux = dict()
@@ -275,14 +275,14 @@ class SpectraLite(object):
             scores = np.hstack([self.scores, other.scores])
         else:
             scores = None
-        
+
         return SpectraLite(bands, wave, flux, ivar, mask, rdat, fibermap, scores)
 
     def write(self, filename, header=None):
         '''
         Write this SpectraLite object to `filename`
         '''
-        
+
         #- create directory if missing
         dirname=os.path.dirname(filename)
         try :
@@ -316,9 +316,9 @@ class SpectraLite(object):
             fitsio.write(tmpout, self.wave[x], extname=X+'_WAVELENGTH',
                     header=dict(BUNIT='Angstrom'))
             fitsio.write(tmpout, self.flux[x], extname=X+'_FLUX',
-                    header=dict(BUNIT='1e-17 erg/(s cm2 Angstrom)'))
+                    header=dict(BUNIT='10**-17 erg/(s cm2 Angstrom)'))
             fitsio.write(tmpout, self.ivar[x], extname=X+'_IVAR',
-                header=dict(BUNIT='1e+34 (s2 cm4 Angstrom2) / erg2'))
+                header=dict(BUNIT='10**+34 (s2 cm4 Angstrom2) / erg2'))
             fitsio.write(tmpout, self.mask[x], extname=X+'_MASK', compress='gzip')
             fitsio.write(tmpout, self.rdat[x], extname=X+'_RESOLUTION')
 
@@ -462,7 +462,7 @@ def frames2spectra(frames, pix, nside=64):
         rdat[x] = list()
         scores[x] = list()
         for xf in xframes:
-            ra, dec = xf.fibermap['RA_TARGET'], xf.fibermap['DEC_TARGET']
+            ra, dec = xf.fibermap['TARGET_RA'], xf.fibermap['TARGET_DEC']
             ok = ~np.isnan(ra) & ~np.isnan(dec)
             ra[~ok] = 0.0
             dec[~ok] = 0.0
@@ -488,10 +488,7 @@ def frames2spectra(frames, pix, nside=64):
             fibermap = np.hstack(fibermap)
 
         if len(scores[x]) > 0:
-            try:
-                scores[x] = np.hstack(scores[x])
-            except:
-                import IPython; IPython.embed()
+            scores[x] = np.hstack(scores[x])
 
     #- Combine scores into a single table
     #- Why doesn't np.vstack work for this? (says invalid type promotion)
@@ -553,4 +550,3 @@ def update_frame_cache(frames, framekeys, specprod_dir=None):
 
     log.debug('Frame cache: {} kept, {} added, {} dropped, now have {}'.format(
          nkeep, nadd, ndrop, len(frames)))
-

@@ -4,7 +4,9 @@
 """
 from __future__ import absolute_import, division
 # The line above will help with 2to3 support.
-import unittest, os, sys
+import unittest
+import os
+import sys
 import tempfile
 from datetime import datetime, timedelta
 from shutil import rmtree
@@ -14,7 +16,12 @@ from astropy.io import fits
 from astropy.table import Table
 from ..frame import Frame
 
-PY3 = sys.version_info.major > 2
+skipMock = False
+try:
+    from unittest.mock import patch
+except ImportError:
+    # Python 2
+    skipMock = True
 
 class TestIO(unittest.TestCase):
     """Test desispec.io.
@@ -71,35 +78,175 @@ class TestIO(unittest.TestCase):
             rmtree(cls.testDir)
 
     def test_write_bintable(self):
-        '''test write_bintable'''
+        """Test writing binary tables to FITS.
+        """
         from ..io.util import write_bintable, fitsheader
+        #
+        # Input: Table
+        #
         hdr = fitsheader(dict(A=1, B=2))
         hdr['C'] = ('BLAT', 'FOO')
         data = Table()
-        data['X'] = [1,2,3]
-        data['Y'] = [3,4,5]
+        data['X'] = [1, 2, 3]
+        data['Y'] = [3, 4, 5]
         write_bintable(self.testfile, data, header=hdr)
-
+        #
+        # Standard suite of table tests.
+        #
         result, newhdr = fits.getdata(self.testfile, header=True)
-        self.assertEqual(result.dtype.names, data.dtype.names)
+        self.assertEqual(sorted(result.dtype.names), sorted(data.dtype.names))
         for colname in data.dtype.names:
             self.assertTrue(np.all(result[colname] == data[colname]), '{} data mismatch'.format(colname))
-
         self.assertEqual(newhdr.comments['C'], 'FOO')
         for key in hdr.keys():
             self.assertIn(key, newhdr)
-
-        #- repeat with other data types
+        self.assertIn('DATASUM', newhdr)
+        self.assertIn('CHECKSUM', newhdr)
         os.remove(self.testfile)
+        #
+        # Input: ndarray
+        #
         hdr = dict(A=1, B=2)
         data = data.as_array()
         write_bintable(self.testfile, data, header=hdr)
+        #
+        # Standard suite of table tests.
+        #
         result, newhdr = fits.getdata(self.testfile, header=True)
-        self.assertEqual(result.dtype.names, data.dtype.names)
+        self.assertEqual(sorted(result.dtype.names), sorted(data.dtype.names))
         for colname in data.dtype.names:
             self.assertTrue(np.all(result[colname] == data[colname]), '{} data mismatch'.format(colname))
+        # self.assertEqual(newhdr.comments['C'], 'FOO')
         for key in hdr.keys():
             self.assertIn(key, newhdr)
+        self.assertIn('DATASUM', newhdr)
+        self.assertIn('CHECKSUM', newhdr)
+        os.remove(self.testfile)
+        #
+        # Input: dictionary
+        #
+        hdr = dict(A=1, B=2)
+        d = dict(X=np.array([1, 2, 3]), Y=np.array([3, 4, 5]))
+        write_bintable(self.testfile, d, header=hdr)
+        #
+        # Standard suite of table tests.
+        #
+        result, newhdr = fits.getdata(self.testfile, header=True)
+
+        self.assertEqual(sorted(result.dtype.names), sorted(data.dtype.names))
+
+        for colname in data.dtype.names:
+            self.assertTrue(np.all(result[colname] == data[colname]), '{} data mismatch'.format(colname))
+        # self.assertEqual(newhdr.comments['C'], 'FOO')
+        for key in hdr.keys():
+            self.assertIn(key, newhdr)
+        self.assertIn('DATASUM', newhdr)
+        self.assertIn('CHECKSUM', newhdr)
+        os.remove(self.testfile)
+        #
+        # Input: Table with column comments.
+        #
+        hdr = fitsheader(dict(A=1, B=2))
+        hdr['C'] = ('BLAT', 'FOO')
+        data = Table()
+        data['X'] = [1, 2, 3]
+        data['Y'] = [3, 4, 5]
+        write_bintable(self.testfile, data, header=hdr,
+                       comments={'X': 'This is X', 'Y': 'This is Y'},
+                       units={'X': 'mm', 'Y': 'mm'})
+        #
+        # Standard suite of table tests.
+        #
+        result, newhdr = fits.getdata(self.testfile, header=True)
+        self.assertEqual(sorted(result.dtype.names), sorted(data.dtype.names))
+        for colname in data.dtype.names:
+            self.assertTrue(np.all(result[colname] == data[colname]), '{} data mismatch'.format(colname))
+        # self.assertEqual(newhdr.comments['C'], 'FOO')
+        for key in hdr.keys():
+            self.assertIn(key, newhdr)
+        self.assertIn('DATASUM', newhdr)
+        self.assertIn('CHECKSUM', newhdr)
+        self.assertEqual(newhdr['TTYPE1'], 'X')
+        self.assertEqual(newhdr.comments['TTYPE1'], 'This is X')
+        self.assertEqual(newhdr['TTYPE2'], 'Y')
+        self.assertEqual(newhdr.comments['TTYPE2'], 'This is Y')
+        self.assertEqual(newhdr['TUNIT1'], 'mm')
+        self.assertEqual(newhdr.comments['TUNIT1'], 'X units')
+        self.assertEqual(newhdr['TUNIT2'], 'mm')
+        self.assertEqual(newhdr.comments['TUNIT2'], 'Y units')
+        #
+        # Input: Table with no EXTNAME, existing file
+        #
+        write_bintable(self.testfile, data, header=hdr)
+        #
+        # Input: Table with EXTNAME, existing file
+        #
+        write_bintable(self.testfile, data, header=hdr, extname='FOOBAR')
+        #
+        # Standard suite of table tests.
+        #
+        result, newhdr = fits.getdata(self.testfile, header=True, extname='FOOBAR')
+        self.assertEqual(sorted(result.dtype.names), sorted(data.dtype.names))
+        for colname in data.dtype.names:
+            self.assertTrue(np.all(result[colname] == data[colname]), '{} data mismatch'.format(colname))
+        # self.assertEqual(newhdr.comments['C'], 'FOO')
+        for key in hdr.keys():
+            self.assertIn(key, newhdr)
+        self.assertIn('DATASUM', newhdr)
+        self.assertIn('CHECKSUM', newhdr)
+        #
+        # Input: Table with existing EXTNAME, existing file
+        #
+        write_bintable(self.testfile, data, header=hdr, extname='FOOBAR')
+        #
+        # Input: Table with EXTNAME, existing file, overwrite
+        #
+        write_bintable(self.testfile, data, header=hdr, extname='FOOBAR', clobber=True)
+
+
+    #- Some macs fail `assert_called_with` tests due to equivalent paths
+    #- of `/private/var` vs. `/var`, so skip this test on Macs.
+    @unittest.skipIf(sys.platform == 'darwin', "Skipping memmap test on Mac.")
+    @unittest.skipIf(skipMock, "Skipping test that requires unittest.mock.")
+    def test_supports_memmap(self):
+        """Test utility to detect when memory-mapping is not possible.
+        """
+        from ..io.util import _supports_memmap
+        foofile = os.path.join(os.path.dirname(self.testfile), 'foo.dat')
+        with patch('os.remove') as rm:
+            with patch('numpy.memmap') as mm:
+                mm.return_value = True
+                foo = _supports_memmap(self.testfile)
+                self.assertTrue(foo)
+                mm.assert_called_with(foofile, dtype='f4', mode='w+', shape=(3, 4))
+            rm.assert_called_with(foofile)
+        with patch('os.remove') as rm:
+            with patch('numpy.memmap') as mm:
+                mm.side_effect = OSError(38, 'Function not implemented')
+                foo = _supports_memmap(self.testfile)
+                self.assertFalse(foo)
+                mm.assert_called_with(foofile, dtype='f4', mode='w+', shape=(3, 4))
+            rm.assert_called_with(foofile)
+
+    def test_dict2ndarray(self):
+        """Test conversion of dictionaries into structured arrays.
+        """
+        from ..io.util import _dict2ndarray
+        x = np.arange(10)
+        y = np.arange(10)*2
+        z = np.arange(20).reshape((10, 2))
+        self.assertEqual(z.shape, (10, 2))
+        d = dict(x=x, y=y, z=z)
+        nddata = _dict2ndarray(d)
+        self.assertTrue((nddata['x'] == x).all())
+        self.assertTrue((nddata['y'] == y).all())
+        self.assertTrue((nddata['z'] == z).all())
+        nddata = _dict2ndarray(d, columns=['x', 'y'])
+        self.assertTrue((nddata['x'] == x).all())
+        self.assertTrue((nddata['y'] == y).all())
+        with self.assertRaises(ValueError) as ex:
+            (nddata['z'] == z).all()
+            self.assertEqual(ex.exception.args[0], 'no field of name z')
 
     def test_fitsheader(self):
         """Test desispec.io.util.fitsheader.
@@ -318,10 +465,13 @@ class TestIO(unittest.TestCase):
             c1 = fibermap[key]
             c2 = fm[key]
             #- Endianness may change, but kind, size, shape, and values are same
-            self.assertEqual(c1.dtype.kind, c2.dtype.kind)
-            self.assertEqual(c1.dtype.itemsize, c2.dtype.itemsize)
             self.assertEqual(c1.shape, c2.shape)
             self.assertTrue(np.all(c1 == c2))
+            if c1.dtype.kind == 'U':
+                self.assertTrue(c2.dtype.kind in ('S', 'U'))
+            else:
+                self.assertEqual(c1.dtype.kind, c2.dtype.kind)
+                self.assertEqual(c1.dtype.itemsize, c2.dtype.itemsize)
 
     def test_stdstar(self):
         """Test reading and writing standard star files.
@@ -451,35 +601,23 @@ class TestIO(unittest.TestCase):
         """
         from ..io.meta import findfile
         from ..io.download import filepath2url
-        filenames1 = list()
-        filenames2 = list()
-        kwargs = {
-            'night':'20150510',
-            'expid':2,
-            'spectrograph':3
-        }
-        for i in ('sky', 'stdstars'):
-            # kwargs['i'] = i
-            for j in ('b','r','z'):
-                kwargs['band'] = j
-                if i == 'sky':
-                    kwargs['camera'] = '{band}{spectrograph:d}'.format(**kwargs)
-                else:
-                    kwargs['camera'] = '{spectrograph:d}'.format(**kwargs)
-                filenames1.append(findfile(i,**kwargs))
-                filenames2.append(os.path.join(os.environ['DESI_SPECTRO_REDUX'],
-                    os.environ['SPECPROD'],'exposures',kwargs['night'],
+
+        kwargs = dict(night=20150510, expid=2, camera='b3', spectrograph=3)
+        file1 = findfile('sky', **kwargs)
+        file2 = os.path.join(os.environ['DESI_SPECTRO_REDUX'],
+                    os.environ['SPECPROD'],'exposures',str(kwargs['night']),
                     '{expid:08d}'.format(**kwargs),
-                    '{i}-{camera}-{expid:08d}.fits'.format(i=i,camera=kwargs['camera'],expid=kwargs['expid'])))
-        for k,f in enumerate(filenames1):
-            self.assertEqual(os.path.basename(filenames1[k]),
-                             os.path.basename(filenames2[k]))
-            self.assertEqual(filenames1[k],filenames2[k])
-            self.assertEqual(filepath2url(filenames1[k]),
-                os.path.join('https://portal.nersc.gov/project/desi',
-                'collab','spectro','redux',os.environ['SPECPROD'],'exposures',
-                kwargs['night'],'{expid:08d}'.format(**kwargs),
-                os.path.basename(filenames2[k])))
+                    'sky-{camera}-{expid:08d}.fits'.format(**kwargs))
+
+        self.assertEqual(file1, file2)
+
+        url1 = filepath2url(file1)
+        url2 = os.path.join('https://portal.nersc.gov/project/desi',
+            'collab','spectro','redux',os.environ['SPECPROD'],'exposures',
+            str(kwargs['night']),'{expid:08d}'.format(**kwargs),
+            os.path.basename(file1))
+        self.assertEqual(url1, url2)
+
         #
         # Make sure that all required inputs are set.
         #
@@ -507,6 +645,31 @@ class TestIO(unittest.TestCase):
         with self.assertRaises(AssertionError):
             x = findfile('spectra', groupname=123)
         os.environ['DESI_SPECTRO_REDUX'] = self.testEnv['DESI_SPECTRO_REDUX']
+
+        #- Camera is case insensitive
+        a = findfile('cframe', night=20200317, expid=18, camera='R7')
+        b = findfile('cframe', night=20200317, expid=18, camera='r7')
+        self.assertEqual(a, b)
+
+        #- night can be int or str
+        a = findfile('cframe', night=20200317, expid=18, camera='b2')
+        b = findfile('cframe', night='20200317', expid=18, camera='b2')
+        self.assertEqual(a, b)
+
+        #- Wildcards are ok for creating glob patterns
+        a = findfile('cframe', night=20200317, expid=18, camera='r*')
+        b = findfile('cframe', night=20200317, expid=18, camera='r?')
+        c = findfile('cframe', night=20200317, expid=18, camera='*')
+        d = findfile('cframe', night=20200317, expid=18, camera='*5')
+        e = findfile('cframe', night=20200317, expid=18, camera='?5')
+
+        #- But these patterns aren't allowed
+        with self.assertRaises(ValueError):
+            a = findfile('cframe', night=20200317, expid=18, camera='r', spectrograph=7)
+        with self.assertRaises(ValueError):
+            a = findfile('cframe', night=20200317, expid=18, camera='X7')
+        with self.assertRaises(ValueError):
+            a = findfile('cframe', night=20200317, expid=18, camera='Hasselblad')
 
     def test_findfile_outdir(self):
         """Test using desispec.io.meta.findfile with an output directory.
@@ -604,6 +767,7 @@ class TestIO(unittest.TestCase):
         self.assertEqual(night1, '20150102')
 
     @unittest.skipUnless(os.path.exists(os.path.join(os.environ['HOME'],'.netrc')),"No ~/.netrc file detected.")
+    @unittest.skipIf(True, "NERSC is out; download will fail")
     def test_download(self):
         """Test desiutil.io.download.
         """

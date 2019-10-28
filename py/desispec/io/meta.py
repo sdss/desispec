@@ -50,6 +50,7 @@ def findfile(filetype, night=None, expid=None, camera=None, groupname=None,
         fiberflat = '{specprod_dir}/exposures/{night}/{expid:08d}/fiberflat-{camera}-{expid:08d}.fits',
         fiberflatnight = '{specprod_dir}/calibnight/{night}/fiberflatnight-{camera}-{night}.fits',
         frame = '{specprod_dir}/exposures/{night}/{expid:08d}/frame-{camera}-{expid:08d}.fits',
+        qframe = '{specprod_dir}/exposures/{night}/{expid:08d}/qframe-{camera}-{expid:08d}.fits',
         cframe = '{specprod_dir}/exposures/{night}/{expid:08d}/cframe-{camera}-{expid:08d}.fits',
         fframe = '{specprod_dir}/exposures/{night}/{expid:08d}/fframe-{camera}-{expid:08d}.fits',
         sframe = '{specprod_dir}/exposures/{night}/{expid:08d}/sframe-{camera}-{expid:08d}.fits',
@@ -61,6 +62,7 @@ def findfile(filetype, night=None, expid=None, camera=None, groupname=None,
         qa_bootcalib = '{qaprod_dir}/calib2d/psf/{night}/qa-psfboot-{camera}.pdf',
         qa_sky_fig = '{qaprod_dir}/exposures/{night}/{expid:08d}/qa-sky-{camera}-{expid:08d}.png',
         qa_skychi_fig = '{qaprod_dir}/exposures/{night}/{expid:08d}/qa-skychi-{camera}-{expid:08d}.png',
+        qa_s2n_fig = '{qaprod_dir}/exposures/{night}/{expid:08d}/qa-s2n-{camera}-{expid:08d}.png',
         qa_flux_fig = '{qaprod_dir}/exposures/{night}/{expid:08d}/qa-flux-{camera}-{expid:08d}.png',
         qa_toplevel_html = '{qaprod_dir}/qa-toplevel.html',
         qa_calib = '{qaprod_dir}/calib2d/{night}/qa-{camera}-{expid:08d}.yaml',
@@ -104,17 +106,32 @@ def findfile(filetype, night=None, expid=None, camera=None, groupname=None,
     if rawdata_dir is None and 'rawdata_dir' in required_inputs:
         rawdata_dir = rawdata_root()
 
-    if specprod_dir is None and 'specprod_dir' in required_inputs:
+    if specprod_dir is None and 'specprod_dir' in required_inputs and outdir is None :
         specprod_dir = specprod_root()
+    elif outdir is not None :
+        # if outdir is set, we will replace specprod_dir anyway
+        # but we may need the variable to be set in the meantime
+        specprod_dir = "dummy"
 
     if qaprod_dir is None and 'qaprod_dir' in required_inputs:
-        qaprod_dir = qaprod_root()
+        qaprod_dir = qaprod_root(specprod_dir=specprod_dir)
 
-    if 'specprod' in required_inputs:
+    if 'specprod' in required_inputs and outdir is None :
         #- Replace / with _ in $SPECPROD so we can use it in a filename
         specprod = os.getenv('SPECPROD').replace('/', '_')
     else:
         specprod = None
+
+    if camera is not None:
+        camera = camera.lower()
+
+        #- Check camera b0, r1, .. z9
+        if spectrograph is not None and len(camera) == 1 \
+           and camera in ['b', 'r', 'z']:
+            raise ValueError('Specify camera=b0,r1..z9, not camera=b/r/z + spectrograph')
+
+        if camera != '*' and re.match('[brz\*\?][0-9\*\?]', camera) is None:
+            raise ValueError('Camera {} should be b0,r1..z9, or with ?* wildcards'.format(camera))
 
     actual_inputs = {
         'specprod_dir':specprod_dir, 'specprod':specprod, 'qaprod_dir':qaprod_dir,
@@ -240,7 +257,7 @@ def find_exposure_night(expid):
                 return night
 
 
-def get_exposures(night, raw=False, rawdata_dir=None, specprod_dir=None, ):
+def get_exposures(night, raw=False, rawdata_dir=None, specprod_dir=None):
     """Get a list of available exposures for the specified night.
 
     Exposures are identified as correctly formatted subdirectory names within the
@@ -272,31 +289,22 @@ def get_exposures(night, raw=False, rawdata_dir=None, specprod_dir=None, ):
     else:
         if specprod_dir is None:
             specprod_dir = specprod_root()
-        night_path = os.path.join(specprod_dir,'exposures',night)
+        night_path = os.path.join(specprod_dir, 'exposures', night)
 
     if not os.path.exists(night_path):
-        raise RuntimeError('Non-existent night %s' % night)
+        raise RuntimeError('Non-existent night {0}'.format(night))
 
     exposures = []
 
-    if raw:
-        fpat = re.compile(r'.*fibermap-(.*).fits')
-        for entry in glob.glob(os.path.join(night_path,'fibermap-*.fits')):
-            mat = fpat.match(entry)
-            if mat is not None:
-                iexp = int(mat.group(1))
-                assert mat.group(1) == "{:08d}".format(iexp)
-                exposures.append(iexp)
-    else:
-        for entry in glob.glob(os.path.join(night_path,'*')):
-            head,tail = os.path.split(entry)
-            try:
-                exposure = int(tail)
-                assert tail == "{:08d}".format(exposure)
-                exposures.append(exposure)
-            except (ValueError,AssertionError):
-                # Silently ignore entries that are not exposure subdirectories.
-                pass
+    for entry in glob.glob(os.path.join(night_path, '*')):
+        e = os.path.basename(entry)
+        try:
+            exposure = int(e)
+            assert e == "{0:08d}".format(exposure)
+            exposures.append(exposure)
+        except (ValueError, AssertionError):
+            # Silently ignore entries that are not exposure subdirectories.
+            pass
 
     return sorted(exposures)
 
@@ -388,16 +396,16 @@ def specprod_root():
     return os.path.join(os.getenv('DESI_SPECTRO_REDUX'), os.getenv('SPECPROD'))
 
 
-def qaprod_root():
+def qaprod_root(specprod_dir=None):
     """Return directory root for spectro production QA, i.e.
     ``$DESI_SPECTRO_REDUX/$SPECPROD/QA``.
 
     Raises:
         AssertionError: if these environment variables aren't set.
     """
-    assert 'SPECPROD' in os.environ, 'Missing $SPECPROD environment variable'
-    assert 'DESI_SPECTRO_REDUX' in os.environ, 'Missing $DESI_SPECTRO_REDUX environment variable'
-    return os.path.join(os.getenv('DESI_SPECTRO_REDUX'), os.getenv('SPECPROD'), 'QA')
+    if specprod_dir is None:
+        specprod_dir = specprod_root()
+    return os.path.join(specprod_dir, 'QA')
 
 
 def get_pipe_database():

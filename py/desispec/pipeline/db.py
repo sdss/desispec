@@ -95,7 +95,6 @@ def all_tasks(night, nside, expid=None):
     """
     import desimodel.footprint
 
-
     log = get_logger()
 
     log.debug("io.get_exposures night={}".format(night))
@@ -105,7 +104,7 @@ def all_tasks(night, nside, expid=None):
     full = dict()
     for t in all_task_types():
         full[t] = list()
-    
+
     healpix_frames = []
 
     if expid is not None:
@@ -119,12 +118,12 @@ def all_tasks(night, nside, expid=None):
         # get the fibermap for this exposure
         fibermap = io.get_raw_files("fibermap", night, ex)
 
-        log.info("read {}".format(fibermap))
+        log.debug("read {}".format(fibermap))
 
-        #fmdata = io.read_fibermap(fibermap)
-        #flavor = fmdata.meta["FLAVOR"]
+        fmdata = io.read_fibermap(fibermap)
+        header = fmdata.meta
 
-        fmdata,header = fitsio.read(fibermap,header=True)
+        # fmdata, header = fitsio.read(fibermap, 'FIBERMAP', header=True)
         flavor = header["FLAVOR"].strip().lower()
         if flavor not in ["arc","flat","science"] :
             log.error("Do not know what do to with fibermap flavor '{}' for file '{}".format(flavor,fibermap))
@@ -134,8 +133,8 @@ def all_tasks(night, nside, expid=None):
         if (flavor != "arc") and (flavor != "flat"):
             # This will be used to track which healpix pixels are
             # touched by fibers from each spectrograph.
-            ra = np.array(fmdata["RA_TARGET"], dtype=np.float64)
-            dec = np.array(fmdata["DEC_TARGET"], dtype=np.float64)
+            ra = np.array(fmdata["TARGET_RA"], dtype=np.float64)
+            dec = np.array(fmdata["TARGET_DEC"], dtype=np.float64)
 
             # rm NaN (possible depending on versions of fiberassign)
             valid_coordinates  = (np.isnan(ra)==False)&(np.isnan(dec)==False)
@@ -600,7 +599,7 @@ class DataBase:
 
         log = get_logger()
 
-        alltasks , healpix_frames = all_tasks(night, nside, expid=expid)
+        alltasks, healpix_frames = all_tasks(night, nside, expid=expid)
 
         with self.cursor() as cur:
             # insert or ignore all healpix_frames
@@ -631,7 +630,7 @@ class DataBase:
         return
 
 
-    def sync(self, night):
+    def sync(self, night, specdone=False):
         """Update states of tasks based on filesystem.
 
         Go through all tasks in the DB for the given night and determine their
@@ -639,7 +638,7 @@ class DataBase:
 
         Args:
             night (str): The night to scan for updates.
-
+            specdone: If true, set spectra to done if files exist.
         """
         from .tasks.base import task_classes
         log = get_logger()
@@ -674,7 +673,6 @@ class DataBase:
         # sync to correctly reconstruct the database state.
 
         pixrows = self.select_healpix_frame({"night" : night})
-
         # First check the existence of the files touched by this night
         spec_exists = dict()
         red_exists = dict()
@@ -749,7 +747,7 @@ class DataBase:
                 spec_name = task_classes["spectra"].name_join(row)
                 red_name = task_classes["redshift"].name_join(row)
 
-                if not cfdone:
+                if (not cfdone) and (not specdone) :
                     # The cframes do not exist, so reset the state of the
                     # spectra and redshift tasks.
                     set_hpx_frame_0(row, spec_name, red_name, cur)
@@ -905,6 +903,22 @@ class DataBase:
                     log.debug("{} of pixel {} is ready to run".format(tt,entry[1]))
                     cur.execute('update {} set state = {} where nside = {} and pixel = {}'.format(tt,task_state_to_int["ready"],entry[0],entry[1]))
 
+                log.debug("checking waiting {} tasks to see if they are done...".format(tt))
+                cmd = "select pixel from {} where state = {}".format(tt, task_state_to_int["waiting"])
+                cur.execute(cmd)
+                pixels = [ x for (x, ) in cur.fetchall()]
+                if len(pixels) > 0:
+                    log.debug("checking {} {} ...".format(len(pixels),tt))
+                    if tt == "spectra":
+                        required_healpix_frame_state = 2
+                    elif tt == "redshift":
+                        required_healpix_frame_state = 3
+                    for pixel in pixels:
+                        cur.execute('select pixel from healpix_frame where pixel = {} and state != {}'.format(pixel,required_healpix_frame_state))
+                        entries = cur.fetchall()
+                        if len(entries)==0 :
+                            log.debug("{} task of pixel {} is done".format(tt,pixel))
+                            cur.execute('update {} set state = {} where pixel = {}'.format(tt,task_state_to_int["done"],pixel))
         return
 
 
@@ -1129,7 +1143,7 @@ class DataBasePostgres(DataBase):
             try:
                 self._conn = pg2.connect(host=self._host, port=self._port,
                     user=self._user, dbname=self._dbname)
-            except psycopg2.OperationalError as err:
+            except pg2.OperationalError as err:
                 log = get_logger()
                 log.debug("PostgreSQL connection failed with '{}', will sleep and retry".format(err))
                 if ntry > maxtry:

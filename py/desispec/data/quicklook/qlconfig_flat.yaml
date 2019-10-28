@@ -4,39 +4,31 @@ Program: dark
 Flavor: flat
 #- Writeout intermediate files
 WritePreprocfile: True
-WriteSkyModelfile: False
-WriteIntermediatefiles: False
-WriteStaticPlots: True
 #-Debuglevel 
 Debuglevel: 20
-#- Must use resolution in extraction to generate fiberflat
-UseResolution: True
 #- Generate modified PSF file
-Flexure: False
 #- Heartbeat Period in seconds
 Period: 5.0
 #- Time out in seconds
 Timeout: 120.0
 # Pipeline algorithm: PAs and QAs for each PA
-Pipeline: [Initialize, Preproc, Flexure, BoxcarExtract, ComputeFiberflat_QL]
+Pipeline: [Initialize, Preproc, Flexure, Extract_QP, ComputeFiberflat_QP]
 Algorithms:
     Initialize:
-        QA: 
-            Check_HDUs:
-                PARAMS: {}
+        QA: {}
     Preproc:
         QA: 
             Bias_From_Overscan:
-                PARAMS: {BIAS_NORMAL_RANGE: [-1.0, 1.0], BIAS_WARN_RANGE: [-2.0, 2.0]}
+                PARAMS: {BIAS_AMP_NORMAL_RANGE: [-40.0, 40.0], BIAS_AMP_WARN_RANGE: [-60.0, 60.0], BIAS_AMP_REF:[150.0,150.0,150.0,150.0]}
             Get_RMS:
-                PARAMS: {PERCENTILES: [68.2,95.4,99.7], NOISE_NORMAL_RANGE: [-1.0, 1.0], NOISE_WARN_RANGE: [-2.0, 2.0]}
+                PARAMS: {PERCENTILES: [68.2,95.4,99.7], NOISE_AMP_NORMAL_RANGE: [-1.5, 1.5], NOISE_AMP_WARN_RANGE: [-2.0, 2.0],NOISE_AMP_REF:[2.6,2.6,2.6,2.6]}
             Count_Pixels:
-                PARAMS: {CUTPIX: 5, LITFRAC_NORMAL_RANGE: [-0.1, 0.1], LITFRAC_WARN_RANGE: [-0.2, 0.2]}
+                PARAMS: {CUTPIX: 5, LITFRAC_AMP_NORMAL_RANGE: [-0.3, 0.3], LITFRAC_AMP_WARN_RANGE: [-0.4, 0.4],LITFRAC_AMP_REF:[0.78,0.78,0.78,0.78]}
     Flexure:
         QA:
             Trace_Shifts:
-                PARAMS: {TRACE_NORMAL_RANGE: [-1.0,1.0], TRACE_WARN_RANGE: [-2.0,2.0]}
-    BoxcarExtract:
+                PARAMS: {XYSHIFTS_NORMAL_RANGE: [-0.6,0.6], XYSHIFTS_WARN_RANGE: [-0.8,0.8],XYSHIFTS_REF:[0.0,0.0]}
+    Extract_QP:
         wavelength: {
             b: [3570,5730,0.8],
             r: [5630,7740,0.8],
@@ -44,6 +36,8 @@ Algorithms:
             }
         QA:
             CountSpectralBins:
-                PARAMS: {CUTBINS: 5,N_KNOWN_BROKEN_FIBERS: 0, NGOODFIB_NORMAL_RANGE: [-1, 1], NGOODFIB_WARN_RANGE: [-2, 2]}
-    ComputeFiberflat_QL:
-        QA: {}
+                PARAMS: {CUTBINS: 5,N_KNOWN_BROKEN_FIBERS: 0, NGOODFIB_NORMAL_RANGE: [-3.0, 3.0], NGOODFIB_WARN_RANGE: [-4.0, 4.0],NGOODFIB_REF:[500]}
+    ComputeFiberflat_QP:
+        QA:
+            Check_FiberFlat:
+                PARAMS: {CHECKFLAT_NORMAL_RANGE:[-0.01,0.01], CHECKFLAT_WARN_RANGE:[-0.02,0.02],CHECKFLAT_REF:[1.0]}

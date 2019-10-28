@@ -15,6 +15,7 @@ import warnings
 import time
 
 import numpy as np
+import astropy.units as u
 import astropy.io.fits as fits
 from astropy.table import Table
 
@@ -55,14 +56,14 @@ def write_spectra(outfile, spec, units=None):
     dir, base = os.path.split(outfile)
     if not os.path.exists(dir):
         os.makedirs(dir)
-        
+
     # Create HDUs from the data
     all_hdus = fits.HDUList()
 
     # metadata goes in empty primary HDU
     hdr = fitsheader(spec.meta)
     add_dependencies(hdr)
-    
+
     all_hdus.append(fits.PrimaryHDU(header=hdr))
 
     # Next is the fibermap
@@ -93,18 +94,23 @@ def write_spectra(outfile, spec, units=None):
 
         hdu = fits.ImageHDU(name="{}_FLUX".format(band.upper()))
         if units is None:
-            hdu.header["BUNIT"] = "1e-17 erg/(s cm2 Angstrom)"
+            hdu.header["BUNIT"] = "10**-17 erg/(s cm2 Angstrom)"
         else:
             hdu.header["BUNIT"] = units
         hdu.data = spec.flux[band].astype("f4")
         all_hdus.append(hdu)
 
         hdu = fits.ImageHDU(name="{}_IVAR".format(band.upper()))
+        if units is None:
+            hdu.header["BUNIT"] = '10**+34 (s2 cm4 Angstrom2) / erg2'
+        else:
+            hdu.header["BUNIT"] = ((u.Unit(units, format='fits'))**-2).to_string('fits')
         hdu.data = spec.ivar[band].astype("f4")
         all_hdus.append(hdu)
 
         if spec.mask is not None:
-            hdu = fits.CompImageHDU(name="{}_MASK".format(band.upper()))
+            # hdu = fits.CompImageHDU(name="{}_MASK".format(band.upper()))
+            hdu = fits.ImageHDU(name="{}_MASK".format(band.upper()))
             hdu.data = spec.mask[band].astype(np.uint32)
             all_hdus.append(hdu)
 
@@ -119,10 +125,7 @@ def write_spectra(outfile, spec, units=None):
                 hdu.data = ex[1].astype("f4")
                 all_hdus.append(hdu)
 
-    try:
-        all_hdus.writeto("{}.tmp".format(outfile), overwrite=True, checksum=True)
-    except TypeError:
-        all_hdus.writeto("{}.tmp".format(outfile), clobber=True, checksum=True)
+    all_hdus.writeto("{}.tmp".format(outfile), overwrite=True, checksum=True)
     os.rename("{}.tmp".format(outfile), outfile)
 
     return outfile
@@ -288,10 +291,8 @@ def read_frame_as_spectra(filename, night=None, expid=None, band=None, single=Fa
     if fr.chi2pix is not None:
         extra = {band : {"CHI2PIX" : fr.chi2pix}}
 
-    spec = Spectra(bands, {band : fr.wave}, {band : fr.flux}, {band : fr.ivar}, 
-        mask=mask, resolution_data=res, fibermap=fmap, meta=fr.meta, 
+    spec = Spectra(bands, {band : fr.wave}, {band : fr.flux}, {band : fr.ivar},
+        mask=mask, resolution_data=res, fibermap=fmap, meta=fr.meta,
         extra=extra, single=single, scores=fr.scores)
 
     return spec
-
-

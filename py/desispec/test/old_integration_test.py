@@ -11,6 +11,12 @@ import time
 import numpy as np
 from astropy.io import fits
 
+try:
+    from scipy import constants
+    C_LIGHT = constants.c/1000.0
+except TypeError: # This can happen during documentation builds.
+    C_LIGHT = 299792458.0/1000.0
+
 from ..util import runcmd
 from .. import io
 from ..qa import QA_Exposure
@@ -281,7 +287,7 @@ def integration_test(night=None, nspec=5, clobber=False):
     fibermap = io.read_fibermap(io.findfile('fibermap', night, expid))
     from desimodel.footprint import radec2pix
     nside=64
-    pixels = np.unique(radec2pix(nside, fibermap['RA_TARGET'], fibermap['DEC_TARGET']))
+    pixels = np.unique(radec2pix(nside, fibermap['TARGET_RA'], fibermap['TARGET_DEC']))
     for pix in pixels:
         outputs.append( io.findfile('spectra', groupname=pix) )
 
@@ -323,10 +329,11 @@ def integration_test(night=None, nspec=5, clobber=False):
     #- (this combination of fibermap, simspec, and zbest is a pain)
     simdir = os.path.dirname(io.findfile('fibermap', night=night, expid=expid))
     simspec = '{}/simspec-{:08d}.fits'.format(simdir, expid)
+    siminfo = fits.getdata(simspec, 'TRUTH')
     try:
-        siminfo = fits.getdata(simspec, 'TRUTH')
-    except KeyError:
-        siminfo = fits.getdata(simspec, 'METADATA')
+        elginfo = fits.getdata(simspec, 'TRUTH_ELG')
+    except:
+        elginfo = None
 
     print()
     print("--------------------------------------------------")
@@ -340,9 +347,13 @@ def integration_test(night=None, nspec=5, clobber=False):
 
             j = np.where(fibermap['TARGETID'] == zbest['TARGETID'][i])[0][0]
             truetype = siminfo['OBJTYPE'][j]
-            oiiflux = siminfo['OIIFLUX'][j]
+            oiiflux = 0.0
+            if truetype == 'ELG':
+                k = np.where(elginfo['TARGETID'] == zbest['TARGETID'][i])[0][0]
+                oiiflux = elginfo['OIIFLUX'][k]
+
             truez = siminfo['REDSHIFT'][j]
-            dv = 3e5*(z-truez)/(1+truez)
+            dv = C_LIGHT*(z-truez)/(1+truez)
             if truetype == 'SKY' and zwarn > 0:
                 status = 'ok'
             elif truetype == 'ELG' and zwarn > 0 and oiiflux < 8e-17:

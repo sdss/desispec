@@ -2,6 +2,9 @@ import numpy as np
 import scipy.optimize
 from numpy.polynomial.legendre import Legendre, legval, legfit
 from desispec.quicklook import qlexceptions,qllogger
+from desispec.io import read_xytraceset, write_xytraceset
+from specter.util.traceset import TraceSet,fit_traces
+
 qlog=qllogger.QLLogger("QuickLook",20)
 log=qlog.getlog()
 
@@ -10,7 +13,7 @@ def sigmas_from_arc(wave,flux,ivar,linelist,n=2):
     Gaussian fitting of listed arc lines and return corresponding sigmas in pixel units
     Args:
     linelist: list of lines (A) for which fit is to be done
-    n: fit region half width (in bin units): n=2 bins => (2*n+1)=5 bins fitting window. 
+    n: fit region half width (in bin units): n=2 bins => (2*n+1)=5 bins fitting window.
     """
 
     nwave=wave.shape
@@ -29,16 +32,20 @@ def sigmas_from_arc(wave,flux,ivar,linelist,n=2):
         thisflux=flux[index-n:index+n+1]
         thisivar=ivar[index-n:index+n+1]
 
-        spots=thisflux/thisflux.sum()
-        errors=1./np.sqrt(thisivar)
-        errors/=thisflux.sum()
+        #RS: skip lines with zero flux
+        if 0. not in thisflux:
+            spots=thisflux/thisflux.sum()
+            try:
+                popt,pcov=scipy.optimize.curve_fit(_gauss_pix,thiswave,spots)
+                meanwaves[jj]=popt[0]+linelist[jj]
+                if pcov[0,0] >= 0.:
+                    emeanwaves[jj]=pcov[0,0]**0.5
+                sigmas[jj]=popt[1]
+                if pcov[1,1] >= 0.:
+                    esigmas[jj]=(pcov[1,1]**0.5)
+            except:
+                pass
 
-        popt,pcov=scipy.optimize.curve_fit(_gauss_pix,thiswave,spots)
-        meanwaves[jj]=popt[0]+linelist[jj]
-        emeanwaves[jj]=pcov[0,0]**0.5
-        sigmas[jj]=popt[1]
-        esigmas[jj]=(pcov[1,1]**0.5)
- 
     k=np.logical_and(~np.isnan(esigmas),esigmas!=np.inf)
     sigmas=sigmas[k]
     meanwaves=meanwaves[k]
@@ -61,13 +68,17 @@ def _gauss_pix(x,mean,sigma):
 
 def process_arc(frame,linelist=None,npoly=2,nbins=2,domain=None):
     """
-    frame: desispec.frame.Frame object, preumably resolution not evaluated. 
+    frame: desispec.frame.Frame object, preumably resolution not evaluated.
     linelist: line list to fit
     npoly: polynomial order for sigma expansion
     nbins: no of bins for the half of the fitting window
     return: coefficients of the polynomial expansion
-    
+
     """
+    
+    if domain is None :
+        raise ValueError("domain must be given in process_arc")
+    
     nspec=frame.flux.shape[0]
     if linelist is None:
         camera=frame.meta["CAMERA"]
@@ -76,49 +87,69 @@ def process_arc(frame,linelist=None,npoly=2,nbins=2,domain=None):
         llist=load_arcline_list(camera)
         dlamb,gd_lines=load_gdarc_lines(camera,llist)
         linelist=gd_lines
-        #linelist=[5854.1101,6404.018,7034.352,7440.9469] #- not final 
-        log.info("No line list configured. Fitting for lines {}".format(linelist))  
+        #linelist=[5854.1101,6404.018,7034.352,7440.9469] #- not final
+        log.info("No line list configured. Fitting for lines {}".format(linelist))
     coeffs=np.zeros((nspec,npoly+1)) #- coeffs array
 
-    #- amend line list to only include lines in given wavelength range
-    wave=frame.wave
-    if wave[0] >= linelist[0]:
-        noline_ind_lo=np.where(np.array(linelist)<=wave[0])
-        linelist=linelist[np.max(noline_ind_lo[0])+1:len(linelist)-1]
-        log.info("First {} line(s) outside wavelength range, skipping these".format(len(noline_ind_lo[0])))
-    if wave[len(wave)-1] <= linelist[len(linelist)-1]:
-        noline_ind_hi=np.where(np.array(linelist)>=wave[len(wave)-1])
-        linelist=linelist[0:np.min(noline_ind_hi[0])-1]
-        log.info("Last {} line(s) outside wavelength range, skipping these".format(len(noline_ind_hi[0])))
-
     for spec in range(nspec):
+        #- Allow arc processing to use either QL or QP extraction
+        if isinstance(frame.wave[0],float):
+            wave=frame.wave
+        else:
+            wave=frame.wave[spec]
+
         flux=frame.flux[spec]
         ivar=frame.ivar[spec]
+
+        #- amend line list to only include lines in given wavelength range
+        if wave[0] >= linelist[0]:
+            noline_ind_lo=np.where(np.array(linelist)<=wave[0])
+            linelist=linelist[np.max(noline_ind_lo[0])+1:len(linelist)-1]
+            log.info("First {} line(s) outside wavelength range, skipping these".format(len(noline_ind_lo[0])))
+        if wave[len(wave)-1] <= linelist[len(linelist)-1]:
+            noline_ind_hi=np.where(np.array(linelist)>=wave[len(wave)-1])
+            linelist=linelist[0:np.min(noline_ind_hi[0])-1]
+            log.info("Last {} line(s) outside wavelength range, skipping these".format(len(noline_ind_hi[0])))
+
         meanwaves,emeanwaves,sigmas,esigmas=sigmas_from_arc(wave,flux,ivar,linelist,n=nbins)
         if domain is None:
             domain=(np.min(wave),np.max(wave))
 
-        thislegfit=fit_wsigmas(meanwaves,sigmas,esigmas,domain=domain,npoly=npoly)
-        coeffs[spec]=thislegfit.coef
-    
-    return coeffs
+        # RS: if Gaussian couldn't be fit to a line, don't do legendre fit for fiber
+        if 0. in sigmas or 0. in esigmas:
+            pass
+        else:
+            try:
+                thislegfit=fit_wsigmas(meanwaves,sigmas,esigmas,domain=domain,npoly=npoly)
+                coeffs[spec]=thislegfit.coef
+            except:
+                pass
 
-def write_psffile(psfbootfile,wcoeffs,outfile,wavestepsize=None):
-    """ 
-    extract psfbootfile, add wcoeffs, and make a new psf file preserving the traces etc. 
-    psf module will load this 
+    # need to return the wavemin and wavemax of the fit
+    return coeffs,domain[0],domain[1]
+
+def write_psffile(infile,wcoeffs,wcoeffs_wavemin,wcoeffs_wavemax,outfile,wavestepsize=None):
     """
-    from astropy.io import fits
-    psf=fits.open(psfbootfile)
-    xcoeff=psf[0]
-    xcoeff.header["PSFTYPE"]='psf'
-    ycoeff=psf[1]
-    xsigma=psf[2]
+    extract psf file, add wcoeffs, and make a new psf file preserving the traces etc.
+    psf module will load this
+    """
+
+    tset = read_xytraceset(infile)
     
-    wsigma=fits.ImageHDU(wcoeffs,name='WSIGMA')
-    wsigma.header["PSFTYPE"]='boxcar'
-    if wavestepsize is None:
-        wavestepsize = 'NATIVE CCD GRID'
-    wsigma.header["WAVESTEP"]=(wavestepsize,'Wavelength step size [Angstroms]')
-    hdulist=fits.HDUList([xcoeff,ycoeff,xsigma,wsigma])
-    hdulist.writeto(outfile,clobber=True)
+    # convert wsigma to ysig ...
+    nfiber    = wcoeffs.shape[0]
+    ncoef     = wcoeffs.shape[1]
+    nw        = 100 # need a larger number than ncoef to get an accurate dydw from the gradients
+    
+    # wcoeffs and tset do not necessarily have the same wavelength range
+    wave      = np.linspace(tset.wavemin,tset.wavemax,nw)
+    wsig_set  = TraceSet(wcoeffs,[wcoeffs_wavemin,wcoeffs_wavemax]) 
+    wsig_vals = np.zeros((nfiber,nw))
+    for f in range(nfiber) :
+        y_vals = tset.y_vs_wave(f,wave)
+        dydw   = np.gradient(y_vals)/np.gradient(wave)
+        wsig_vals[f]=wsig_set.eval(f,wave)*dydw
+    tset.ysig_vs_wave_traceset = fit_traces(wave, wsig_vals, deg=ncoef-1, domain=(tset.wavemin,tset.wavemax))
+        
+    write_xytraceset(outfile,tset)
+    

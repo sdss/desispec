@@ -61,27 +61,27 @@ class TaskStarFit(BaseTask):
         from .base import task_classes
         props = self.name_split(name)
 
-        # we need at least the b-camera for the fit of standard stars
-        props_and_b       = props.copy()
-        props_and_b["band"] = "b"
-
-        deptasks = {
-            "b-frame" : task_classes["extract"].name_join(props_and_b) ,
-            "b-fiberflat" : task_classes["fiberflatnight"].name_join(props_and_b) ,
-            "b-sky" : task_classes["sky"].name_join(props_and_b)
-        }
+        # we need all the cameras for the fit of standard stars
+        deptasks = dict()
+        for band in ["b","r","z"] :
+            props_and_band       = props.copy()
+            props_and_band["band"] = band
+            deptasks[band+"-frame"]=task_classes["extract"].name_join(props_and_band)
+            deptasks[band+"-fiberflat"]=task_classes["fiberflatnight"].name_join(props_and_band)
+            deptasks[band+"-sky"]=task_classes["sky"].name_join(props_and_band)
         return deptasks
 
-    def _run_max_procs(self, procs_per_node):
-        """See BaseTask.run_max_procs.
-        """
+    def _run_max_procs(self):
+        # This is a serial task.
         return 1
 
+    def _run_time(self, name, procs, db):
+        # Run time on one proc on machine with scale factor == 1.0
+        return 35.0
 
-    def _run_time(self, name, procs_per_node, db=None):
-        """See BaseTask.run_time.
-        """
-        return 15 # less than 4 min on edison but can vary quite a bit
+    def _run_max_mem_proc(self, name, db):
+        # Per-process memory requirements
+        return 5.0
 
 
     def _run_defaults(self):
@@ -94,9 +94,20 @@ class TaskStarFit(BaseTask):
         opts = {}
         starmodels = None
         if "DESI_BASIS_TEMPLATES" in os.environ:
-            filenames = glob.glob(os.environ["DESI_BASIS_TEMPLATES"]+"/star_templates_*.fits")
+            filenames = sorted(glob.glob(os.environ["DESI_BASIS_TEMPLATES"]+"/stdstar_templates_*.fits"))
             if len(filenames) > 0 :
-                starmodels = filenames[0]
+                starmodels = filenames[-1]
+            else:
+                filenames = sorted(glob.glob(os.environ["DESI_BASIS_TEMPLATES"]+"/star_templates_*.fits"))
+                log.warning('Unable to find stdstar templates in {}; using star templates instead'.format(
+                    os.getenv('DESI_BASIS_TEMPLATES')))
+                if len(filenames) > 0 :
+                    starmodels = filenames[-1]
+                else:
+                    msg = 'Unable to find stdstar or star templates in {}'.format(
+                        os.getenv('DESI_BASIS_TEMPLATES'))
+                    log.error(msg)
+                    raise RuntimeError(msg)
         else:
             log.error("DESI_BASIS_TEMPLATES not set!")
             raise RuntimeError("could not find the stellar templates")
@@ -105,7 +116,6 @@ class TaskStarFit(BaseTask):
 
         opts["delta-color"] = 0.2
         opts["color"] = "G-R"
-
 
         return opts
 
@@ -123,15 +133,15 @@ class TaskStarFit(BaseTask):
 
         deps = self.deps(name)
         options = {}
-        options["outfile"]=self.paths(name)[0]
-        options["frames"]=[]
-        options["skymodels"]=[]
-        options["fiberflats"]=[]
-
+        ### options["ncpu"] = 1
+        options["outfile"] = self.paths(name)[0]
+        options["frames"] = []
+        options["skymodels"] = []
+        options["fiberflats"] = []
 
         # frames skymodels fiberflats
         props = self.name_split(name)
-        for band in ["b","r","z"] :
+        for band in ["b", "r", "z"] :
             props_and_band = props.copy()
             props_and_band["band"] = band
 

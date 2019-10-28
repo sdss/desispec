@@ -2,10 +2,260 @@
 desispec Change Log
 ===================
 
-0.22.1 (unreleased)
+0.30.1 (unreleased)
 -------------------
 
-* No changes yet.
+* Use rrdesi --no-mpi-abort feature (PR `#823`_).
+* Added code to generate pixflats (PR `#824`_).
+* Support extractions of data without fibermaps (PR `#825`_).
+* Propagate FIBERMAP into preproc files (not just frames)
+  (PR `#825`_ and `#829`_).
+* Allow extraction wavelenghts slightly off CCD (PR `#836`_).
+* PSF I/O pause before merging (PR `#836`_).
+* Use OBSTYPE instead of FLAVOR for desi_qproc (PR `#839`_).
+
+.. _`#823`: https://github.com/desihub/desispec/pull/823
+.. _`#824`: https://github.com/desihub/desispec/pull/824
+.. _`#825`: https://github.com/desihub/desispec/pull/825
+.. _`#829`: https://github.com/desihub/desispec/pull/829
+.. _`#836`: https://github.com/desihub/desispec/pull/836
+.. _`#839`: https://github.com/desihub/desispec/pull/839
+
+0.30.0 (2019-10-17)
+-------------------
+
+* qproc updates (PR `#787`_).
+* QL bias (PR `#789`_).
+* Heliocentric corrections (PR `#790`_).
+* Update photometric filter usages (PR `#791`_).
+* Add gain output option to desi_compute_gain
+* Modify overscan subtraction algorithm in desi.preproc.preproc (PR `#793`_).
+* Cleanup timing parameters (PR `#794`_).
+* Pipeline docs (PR `#797`_).
+* Correct for dark trail in raw images (PR `#798`_).
+* `yaml.load()` to `yaml.save_load()` (PR `#801`_).
+* help numba know the types (PR `#802`_).
+* desi_pipe getready fix (PR `#803`_).
+* Move raw data transfer scripts to desitransfer_ (PR `#804`_).
+* spectra coaddition (PR `#805`_).
+* memory constraints and load balancing (PR `#806`_ and `#809`_).
+* preproc header keywords CCDSEC1-4 vs. A-D (PR `#807`_).
+* Add `desi_pipe status` command (PR `#810`_).
+* Convert any expid input into an int in QA (PR `#814`_).
+* Support new FIBERASSIGN_X/Y instead of DESIGN_X/Y (PR `#821`_).
+* Added hostname and jobid to task logging (PR `#822`_).
+
+.. _desitransfer: https://github.com/desihub/desitransfer
+.. _`#787`: https://github.com/desihub/desispec/pull/787
+.. _`#789`: https://github.com/desihub/desispec/pull/789
+.. _`#790`: https://github.com/desihub/desispec/pull/790
+.. _`#791`: https://github.com/desihub/desispec/pull/791
+.. _`#793`: https://github.com/desihub/desispec/pull/793
+.. _`#794`: https://github.com/desihub/desispec/pull/794
+.. _`#797`: https://github.com/desihub/desispec/pull/797
+.. _`#798`: https://github.com/desihub/desispec/pull/798
+.. _`#801`: https://github.com/desihub/desispec/pull/801
+.. _`#802`: https://github.com/desihub/desispec/pull/802
+.. _`#803`: https://github.com/desihub/desispec/pull/803
+.. _`#804`: https://github.com/desihub/desispec/pull/804
+.. _`#805`: https://github.com/desihub/desispec/pull/805
+.. _`#806`: https://github.com/desihub/desispec/pull/806
+.. _`#807`: https://github.com/desihub/desispec/pull/807
+.. _`#809`: https://github.com/desihub/desispec/pull/809
+.. _`#810`: https://github.com/desihub/desispec/pull/810
+.. _`#814`: https://github.com/desihub/desispec/pull/814
+.. _`#821`: https://github.com/desihub/desispec/pull/821
+.. _`#822`: https://github.com/desihub/desispec/pull/822
+
+0.29.0 (2019-05-30)
+-------------------
+
+* Add HPSS backup to the raw data transfer script (PR `#765`_).
+* Update :mod:`desispec.database.redshift` for latest
+  changes in fiberassign tile file data model (PR `#770`_).
+* Constants, docs, and test cleanup (PR `#771`_, `#773`_, `#776`_).
+* Tune cosmics masking parameters (PR `#775`_).
+* Add desi_compute_pixmask (PR `#777`_).
+* qproc updates for more flexibility and exposure flavors (PR `#778`_).
+* Better io.findfile camera checks (PR `#780`_).
+* Support SV1_DESI_TARGET (PR `#786`_).
+
+.. _`#786`: https://github.com/desihub/desispec/pull/786
+.. _`#780`: https://github.com/desihub/desispec/pull/780
+.. _`#778`: https://github.com/desihub/desispec/pull/778
+.. _`#777`: https://github.com/desihub/desispec/pull/777
+.. _`#776`: https://github.com/desihub/desispec/pull/776
+.. _`#775`: https://github.com/desihub/desispec/pull/775
+.. _`#773`: https://github.com/desihub/desispec/pull/773
+.. _`#771`: https://github.com/desihub/desispec/pull/771
+.. _`#770`: https://github.com/desihub/desispec/pull/770
+.. _`#765`: https://github.com/desihub/desispec/pull/765
+
+0.28.0 (2019-02-28)
+-------------------
+
+* Update (non-essential) transfer script for spectrograph functional
+  verification tests (PR `#758`_).
+* New calibration data access (inc var. DESI_SPECTRO_CALIB
+  replacing DESI_CCD_CALIBRATION_DATA) (PR `#753`_).
+* Fix offline QA S/N vs. mag fits (PR `#763`_).
+
+.. _`#753`: https://github.com/desihub/desispec/pull/753
+.. _`#758`: https://github.com/desihub/desispec/pull/758
+.. _`#763`: https://github.com/desihub/desispec/pull/763
+
+0.27.1 (2019-01-28)
+-------------------
+
+* QL updates for January 2019 readiness review (PRs `#750`_, `#751`_, `#752`_,
+  `#754`_, `#755`_, `#756`_, `#757`_).
+
+.. _`#750`: https://github.com/desihub/desispec/pull/750
+.. _`#751`: https://github.com/desihub/desispec/pull/751
+.. _`#752`: https://github.com/desihub/desispec/pull/752
+.. _`#754`: https://github.com/desihub/desispec/pull/754
+.. _`#755`: https://github.com/desihub/desispec/pull/755
+.. _`#756`: https://github.com/desihub/desispec/pull/756
+.. _`#757`: https://github.com/desihub/desispec/pull/757
+
+0.27.0 (2018-12-16)
+-------------------
+
+* DB loading targets columns `PRIORITY_INIT` and `NUMOBS_INIT`;
+  requires desitarget/0.27.0 or later for DB loading (PR `#747`_).
+* Fix S/N QA when inputs have NaNs (PR `#746`_).
+* DB exposures table loading allows NaN entries for RA,DEC,SEEING,etc.
+  for arc and flat calib exposures (PR `#743`_).
+* Use new `desiutil.dust.ext_odonnell` function during flux-calibration
+  (PR `#736`_).
+* Add support for average flux calibration model in ccd_calibration_data
+  repo (PR `#735`_).
+* Support mockobs fibermap format with fewer columns (PR `#733`_).
+* Upgrade data transfer script and add additional scripts (PR `#732`_).
+* Fix desi_zcatalog RA_TARGET vs. TARGET_RA (PR `#723`_).
+* Update redshift database data model and workaround a minor bad data problem (PR `#722`_).
+* Refactor offline QA (S/N) to work with updated object typing
+* Drop `contam_target` DB truth column; no longer in truth files
+  (one-line commit to master, no PR).
+* Bug fix in QA (S/N) + refactor exposure slurping (PR `#746`_)
+* Refactor QA_Exposures, QA_Night, and QA_Prod; Generate new Prod QA (offline)
+
+.. _`#722`: https://github.com/desihub/desispec/pull/722
+.. _`#723`: https://github.com/desihub/desispec/pull/723
+.. _`#732`: https://github.com/desihub/desispec/pull/732
+.. _`#733`: https://github.com/desihub/desispec/pull/733
+.. _`#735`: https://github.com/desihub/desispec/pull/735
+.. _`#736`: https://github.com/desihub/desispec/pull/736
+.. _`#737`: https://github.com/desihub/desispec/pull/737
+.. _`#743`: https://github.com/desihub/desispec/pull/743
+.. _`#746`: https://github.com/desihub/desispec/pull/746
+.. _`#747`: https://github.com/desihub/desispec/pull/747
+
+0.26.0 (2018-11-08)
+-------------------
+
+Major non-backwards compatible changes:
+
+* Update to new fibermap format for consistency with targeting and
+  fiber assignment (PR `#717`_).
+* Include GAIN in preproc headers (PR `#715`_).
+* Prototype data transfer status report webpage (PR `#714`_).
+* Integrate qproc/qframe into quicklook (PR `#713`_).
+* Quicklook flux calib and config edits (PR `#707`_).
+
+.. _`#707`: https://github.com/desihub/desispec/pull/707
+.. _`#713`: https://github.com/desihub/desispec/pull/713
+.. _`#714`: https://github.com/desihub/desispec/pull/714
+.. _`#715`: https://github.com/desihub/desispec/pull/715
+.. _`#717`: https://github.com/desihub/desispec/pull/717
+
+0.25.0 (2018-10-24)
+-------------------
+
+* QL algorithm, config, and format updates (PRs `#699`_, `#701`_, `#702`_).
+  (Includes non-backwards compatible changes).
+
+.. _`#699`: https://github.com/desihub/desispec/pull/699
+.. _`#701`: https://github.com/desihub/desispec/pull/701
+.. _`#702`: https://github.com/desihub/desispec/pull/702
+
+
+0.24.0 (2018-01-05)
+-------------------
+
+* Quicklook updates (including non-backwards compatible changes)
+
+  * New QL calibration QA metrics (PR `#677`_).
+  * Update QL to use xytraceset instead of custom PSF (PR `#682`_).
+  * Cleanup for robustness and maintainability (PR `#693`_).
+
+* Offline QA updates
+
+  * Integrates QL S/N QA into offline QA Frame object (PR `#675`_).
+  * Additional offline QA plots on S/N (PR `#691`_).
+
+* Spectroscopic pipeline updates
+
+  * Option to generate bash scripts instead of slurm scripts (PR `#686`_).
+  * new `desi_pipe go --resume` option (PR `#687`_).
+  * `desi_pipe sync --force-spec-done` option (PR `#692`_)
+
+* Miscellaneous
+
+  * Work-around bug that forbids opening memory-mapped files in update mode
+    on some NERSC filesystems (PR `#689`_).
+  * Do not compress image masks (PR `#696`_).
+  * Ensure that FITS files specify FITS-standard-compliant units (PR `#673`_).
+  * Integration test fixes (PR `#695`_).
+
+.. _`#673`: https://github.com/desihub/desispec/pull/673
+.. _`#675`: https://github.com/desihub/desispec/pull/675
+.. _`#677`: https://github.com/desihub/desispec/pull/677
+.. _`#682`: https://github.com/desihub/desispec/pull/682
+.. _`#686`: https://github.com/desihub/desispec/pull/686
+.. _`#687`: https://github.com/desihub/desispec/pull/687
+.. _`#689`: https://github.com/desihub/desispec/pull/689
+.. _`#691`: https://github.com/desihub/desispec/pull/691
+.. _`#692`: https://github.com/desihub/desispec/pull/692
+.. _`#693`: https://github.com/desihub/desispec/pull/693
+.. _`#695`: https://github.com/desihub/desispec/pull/695
+.. _`#696`: https://github.com/desihub/desispec/pull/696
+
+0.23.1 (2018-08-09)
+-------------------
+
+* Support STD/STD_FSTAR/STD_FAINT bit names (PR `#674`_).
+
+.. _`#674`: https://github.com/desihub/desispec/pull/674
+
+0.23.0 (2018-07-26)
+-------------------
+
+* Adds qproc algorithms and QFrame class (PR `#664`_).
+* Adds `desi_pipe go` for production running (PR `#666`_).
+* Increase job maxtime for edison realtime queue (PR `#667`_).
+* Updates for running desispec on BOSS data (PR `#669`_).
+* Fix QL for list vs. array change in specter/master (PR `#670`_).
+
+.. _`#664`: https://github.com/desihub/desispec/pull/664
+.. _`#666`: https://github.com/desihub/desispec/pull/666
+.. _`#667`: https://github.com/desihub/desispec/pull/667
+.. _`#669`: https://github.com/desihub/desispec/pull/669
+.. _`#670`: https://github.com/desihub/desispec/pull/670
+
+0.22.1 (2018-07-18)
+-------------------
+
+* Update processing of QL metrics (PR `#659`_).
+* Refactor pipeline and integration test (PR `#660`_).
+* Update redshift database to handle changes to fiberassign data model
+  (PR `#662`_).
+* Allow rows to be filtered when loading the redshift database (PR `#663`_).
+
+.. _`#659`: https://github.com/desihub/desispec/pull/659
+.. _`#660`: https://github.com/desihub/desispec/pull/660
+.. _`#662`: https://github.com/desihub/desispec/pull/662
+.. _`#663`: https://github.com/desihub/desispec/pull/663
 
 0.22.0 (2018-06-30)
 -------------------
@@ -29,6 +279,7 @@ exposure into a separate directory `$DESI_SPECTRO_DATA/{YEARMMDD}/{EXPID}/`.
 * Fix cosmics masking near masked saturated pixels (PR `#649`_).
 * Update edison realtime queue config to 25 nodes (PR `#650`_).
 * trace_shift code supports PSF formats without "PSF" HDU (PR `#654`_).
+* Change keyword ``clobber`` to ``overwrite`` in functions from ``astropy.io.fits`` (PR `#658`_).
 
 .. _`#634`: https://github.com/desihub/desispec/pull/634
 .. _`#635`: https://github.com/desihub/desispec/pull/635
@@ -44,6 +295,7 @@ exposure into a separate directory `$DESI_SPECTRO_DATA/{YEARMMDD}/{EXPID}/`.
 .. _`#649`: https://github.com/desihub/desispec/pull/649
 .. _`#650`: https://github.com/desihub/desispec/pull/650
 .. _`#654`: https://github.com/desihub/desispec/pull/654
+.. _`#658`: https://github.com/desihub/desispec/pull/658
 
 0.21.0 (2018-05-25)
 -------------------
@@ -56,10 +308,12 @@ and pipeline updates for semi-realtime nightly processing.
 * Better sync of pixel tasks and DB sync bugfixes (PR `#590`_).
 * Improved handling of errors in case of full job failure (PR `#592`_).
 * QA speedups and improvements (PR `#593`_)
+
   * Add ability to load Frame without reading Resolution matrix
   * Refactor offline QA to use qaprod_dir more sensibly
   * Include hooks in QA to previous fiberflat file location (calib2d)
   * Inhibit scatter plot in skyredidual QA
+
 * Pass MAG into output zbest file (PR `#595`_)
 * Allow running multiple task types in a single job (PR `#601`_).
 * Pipeline hooks for processing a single exposure (PR `#604`_).

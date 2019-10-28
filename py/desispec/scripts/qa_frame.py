@@ -9,7 +9,7 @@ from desispec.qa import __offline_qa_version__
 def parse(options=None):
     parser = argparse.ArgumentParser(description="Generate Frame Level QA [v{:s}]".format(__offline_qa_version__))
     parser.add_argument('--frame_file', type = str, required=True,
-                        help='Frame filename.  Full path is not required nor desired. ')
+                        help='Frame filename (e.g. frame-b1-00000010.fits).  Full path is not required nor desired. ')
     parser.add_argument('--specprod_dir', type = str, default = None, metavar = 'PATH',
                         help = 'Override default path ($DESI_SPECTRO_REDUX/$SPECPROD) to processed data.')
     parser.add_argument('--make_plots', default=False, action="store_true",
@@ -39,7 +39,7 @@ def main(args) :
         specprod_dir = args.specprod_dir
 
     # Generate qaframe (and figures?)
-    _ = qaframe_from_frame(args.frame_file, specprod_dir=specprod_dir, make_plots=args.make_plots,
+    qaframe = qaframe_from_frame(args.frame_file, specprod_dir=specprod_dir, make_plots=args.make_plots,
                            output_dir=args.output_dir)
 
 

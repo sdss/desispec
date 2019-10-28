@@ -624,7 +624,7 @@ def load_arcline_list(camera, vacuum=True,lamps=None):
         medium = 'air'
     rej_file = resource_filename('desispec', "data/arc_lines/rejected_lines_{0}.yaml".format(medium))
     with open(rej_file, 'r') as infile:
-        rej_dict = yaml.load(infile)
+        rej_dict = yaml.safe_load(infile)
     # Loop through the NIST Tables
     tbls = []
     for iline in lamps:
@@ -1650,7 +1650,7 @@ def write_psf(outfile, xfit, fdicts, gauss, wv_solns, legendre_deg=5, without_ar
     hdulist = fits.HDUList([prihdu, yhdu, gausshdu])
 
 
-    hdulist.writeto(outfile, clobber=True)
+    hdulist.writeto(outfile, overwrite=True)
 
 def write_line_list(filename,all_wv_soln,llist) :
     wave = np.array([])

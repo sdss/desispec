@@ -51,8 +51,8 @@ class TestSky(unittest.TestCase):
         fibermap = desispec.io.empty_fibermap(self.nspec, 1500)
         fibermap['OBJTYPE'][0::2] = 'SKY'
         
-        x=fibermap["X_TARGET"]
-        y=fibermap["Y_TARGET"]
+        x=fibermap["FIBERASSIGN_X"]
+        y=fibermap["FIBERASSIGN_Y"]
         x = x-np.mean(x)
         y = y-np.mean(y)
         if np.std(x)>0 : x /= np.std(x)
@@ -99,7 +99,7 @@ class TestSky(unittest.TestCase):
         subtract_sky(spectra, sky)
         
         #- allow some slop in the sky subtraction
-        self.assertTrue(np.allclose(spectra.flux, 0, rtol=1e-3, atol=1e-3)) # this is not exact, it's an iterative fit
+        self.assertTrue(np.allclose(spectra.flux, 0, rtol=1e-3, atol=1.)) # this is not exact, it's an iterative fit
         
     
     def test_subtract_sky_with_gradient_using_compute_non_uniform_sky(self):

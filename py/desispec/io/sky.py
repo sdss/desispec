@@ -40,15 +40,16 @@ def write_sky(outfile, skymodel, header=None):
     hdr['EXTNAME'] = ('SKY', 'no dimension')
     hx.append( fits.PrimaryHDU(skymodel.flux.astype('f4'), header=hdr) )
     hx.append( fits.ImageHDU(skymodel.ivar.astype('f4'), name='IVAR') )
-    hx.append( fits.CompImageHDU(skymodel.mask, name='MASK') )
+    # hx.append( fits.CompImageHDU(skymodel.mask, name='MASK') )
+    hx.append( fits.ImageHDU(skymodel.mask, name='MASK') )
     hx.append( fits.ImageHDU(skymodel.wave.astype('f4'), name='WAVELENGTH') )
     if skymodel.stat_ivar is not None :
        hx.append( fits.ImageHDU(skymodel.stat_ivar.astype('f4'), name='STATIVAR') )
-    
+
 
     hx[-1].header['BUNIT'] = 'Angstrom'
 
-    hx.writeto(outfile+'.tmp', clobber=True, checksum=True)
+    hx.writeto(outfile+'.tmp', overwrite=True, checksum=True)
     os.rename(outfile+'.tmp', outfile)
 
     return outfile
@@ -81,5 +82,5 @@ def read_sky(filename) :
     fx.close()
 
     skymodel = SkyModel(wave, skyflux, ivar, mask, header=hdr,stat_ivar=stat_ivar)
-    
+
     return skymodel

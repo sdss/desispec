@@ -15,6 +15,12 @@ import shutil
 import numpy as np
 from astropy.io import fits
 
+try:
+    from scipy import constants
+    C_LIGHT = constants.c/1000.0
+except TypeError: # This can happen during documentation builds.
+    C_LIGHT = 299792458.0/1000.0
+
 from desispec.util import runcmd
 import desispec.pipeline as pipe
 import desispec.io as io
@@ -38,15 +44,15 @@ def check_env():
         log.warning('missing $DESI_BASIS_TEMPLATES directory')
         log.warning('e.g. see NERSC:/project/projectdirs/desi/spectro/templates/basis_templates/v2.2')
         missing_env = True
-    
-    if 'DESI_CCD_CALIBRATION_DATA' not in os.environ:
-        log.warning('missing $DESI_CCD_CALIBRATION_DATA needed for preprocessing images and PSF starting point')
+
+    if 'DESI_SPECTRO_CALIB' not in os.environ:
+        log.warning('missing $DESI_SPECTRO_CALIB needed for preprocessing images and PSF starting point')
         missing_env = True
-    elif not os.path.isdir(os.getenv('DESI_CCD_CALIBRATION_DATA')):
-        log.warning('missing $DESI_CCD_CALIBRATION_DATA directory')
-        log.warning('e.g. see NERSC:/project/projectdirs/desi/spectro/ccd_calibration_data/trunk')
+    elif not os.path.isdir(os.getenv('DESI_SPECTRO_CALIB')):
+        log.warning('missing $DESI_SPECTRO_CALIB directory')
+        log.warning('e.g. see NERSC:/project/projectdirs/desi/spectro/desi_spectro_calib/trunk')
         missing_env = True
-    
+
     for name in (
         'DESI_SPECTRO_SIM', 'DESI_SPECTRO_REDUX', 'PIXPROD', 'SPECPROD', 'DESIMODEL'):
         if name not in os.environ:
@@ -121,7 +127,7 @@ def run_pipeline_step(tasktype):
     nready = task_count['ready']
     if nready > 0:
         log.info('{:16s}: {}'.format(tasktype, count_string))
-        com = "desi_pipe tasks --tasktypes {tasktype} | grep -v DEBUG | desi_pipe script".format(tasktype=tasktype)
+        com = "desi_pipe tasks --tasktypes {tasktype} | grep -v DEBUG | desi_pipe script --shell".format(tasktype=tasktype)
         log.info('Running {}'.format(com))
         script = sp.check_output(com, shell=True)
         log.info('Running {}'.format(script))
@@ -224,10 +230,14 @@ def integration_test(night=None, nspec=5, clobber=False):
     simdir = os.path.dirname(fmfile)
     simspec = '{}/simspec-{:08d}.fits'.format(simdir, expid)
     siminfo = fits.getdata(simspec, 'TRUTH')
+    try:
+        elginfo = fits.getdata(simspec, 'TRUTH_ELG')
+    except:
+        elginfo = None
 
     from desimodel.footprint import radec2pix
     nside=64
-    pixels = np.unique(radec2pix(nside, fibermap['RA_TARGET'], fibermap['DEC_TARGET']))
+    pixels = np.unique(radec2pix(nside, fibermap['TARGET_RA'], fibermap['TARGET_DEC']))
 
     num_missing = 0
     for pix in pixels:
@@ -258,9 +268,13 @@ def integration_test(night=None, nspec=5, clobber=False):
 
             j = np.where(fibermap['TARGETID'] == zbest['TARGETID'][i])[0][0]
             truetype = siminfo['OBJTYPE'][j]
-            oiiflux = siminfo['OIIFLUX'][j]
+            oiiflux = 0.0
+            if truetype == 'ELG':
+                k = np.where(elginfo['TARGETID'] == zbest['TARGETID'][i])[0][0]
+                oiiflux = elginfo['OIIFLUX'][k]
+
             truez = siminfo['REDSHIFT'][j]
-            dv = 3e5*(z-truez)/(1+truez)
+            dv = C_LIGHT*(z-truez)/(1+truez)
             status = None
             if truetype == 'SKY' and zwarn > 0:
                 status = 'ok'

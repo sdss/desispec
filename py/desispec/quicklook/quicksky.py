@@ -40,6 +40,8 @@ def compute_sky(fframe,fibermap=None,nsig_clipping=4., apply_resolution=False):
     skyfibers = np.where(fibermap['OBJTYPE'] == 'SKY')[0]
     skyfluxes=fframe.flux[skyfibers]
     skyivars=fframe.ivar[skyfibers]
+    
+   
     nfibers=len(skyfibers)
 
     if apply_resolution:
@@ -79,7 +81,7 @@ def compute_sky(fframe,fibermap=None,nsig_clipping=4., apply_resolution=False):
             A_pos_def = A_pos_def[:,w]
             skyflux = B*0
             try:
-                skyflux[w]=cholesky_solve(A_pos_def,B[w])
+                skyflux[w]=cholesky_solve(A_pos_def,B[w],rcond=None)
             except:
                 print("cholesky failed, trying svd in iteration {}".format(iteration))
                 skyflux[w]=np.linalg.lstsq(A_pos_def,B[w],rcond=None)[0]
@@ -200,7 +202,7 @@ def subtract_sky(fframe,skymodel):
     #frame is modified. Just modify input frame directly instead!
 
     fframe.flux= fframe.flux-skymodel.flux
-    fframe.ivar = util.combine_ivar(fframe.ivar.clip(0), skymodel.ivar.clip(0))
+    fframe.ivar = util.combine_ivar(fframe.ivar.clip(1e-8), skymodel.ivar.clip(1e-8))
     fframe.mask = fframe.mask | skymodel.mask
     #- create a frame object now
     #sframe=fr.Frame(fframe.wave,sflux,sivar,smask,fframe.resolution_data,meta=fframe.meta,fibermap=fframe.fibermap)
